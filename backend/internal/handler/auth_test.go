@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestRegister(t *testing.T) {
+func TestRegisterSuccess(t *testing.T) {
 	// Set up router
 	gin.SetMode(gin.TestMode)
 
@@ -79,10 +79,112 @@ func TestRegister(t *testing.T) {
 	
 }
 
-func TestLogin(t *testing.T) {
+func TestLoginSuccess(t *testing.T) {
+	// Set up router
+	gin.SetMode(gin.TestMode)
 
+	// Create router and bind handler
+	router := gin.Default()
+	router.POST("/api/auth/login", Login)
+
+	// Create a payload for the login request
+	payload := loginRequest{
+		Email: "test@example.com",
+		Password: "testpassword",
+	}
+
+	// Convert payload to JSON
+	body, err := json.Marshal(payload)
+	if err != nil {
+		panic("Failed to marshal payload: " + err.Error())
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(body))
+	if err != nil {
+		panic("Failed to create request: " + err.Error())
+	}
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	// Perform the request
+	router.ServeHTTP(w, req)
+
+	// Check the response status code
+	assert.Equal(t, http.StatusOK, w.Code, "Expected status code 200 OK")
+
+	// Check the response body
+	var response map[string] interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NotEmpty(t, response["access_token"], "Expected access token to be present")
+	assert.NotEmpty(t, response["refresh_token"], "Expected refresh token to be present")
 }
 
 func TestRefresh(t *testing.T) {
+	// Set up router
+	gin.SetMode(gin.TestMode)
 
+	// Create router and bind handler
+	router := gin.Default()
+	router.POST("/api/auth/login", Login)
+	router.POST("/api/auth/refresh", Refresh)
+
+	// First, log in to get tokens
+	payload := loginRequest{
+		Email:    "test@example.com",
+		Password: "testpassword",
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		panic("Failed to marshal payload: " + err.Error())
+	}
+
+	req, err := http.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(body))
+	if err != nil {
+		panic("Failed to create request: " + err.Error())
+	}
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Check the response status code
+	assert.Equal(t, http.StatusOK, w.Code, "Expected status code 200 OK")
+
+	// Second, parse the response to get the refresh token
+	var loginResponse map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &loginResponse)
+	refreshToken := loginResponse["refresh_token"].(string)
+	accessToken := loginResponse["access_token"].(string)
+
+	// Third, use the refresh token to get a new access token
+	refreshPayload := refreshRequest{
+		RefreshToken: refreshToken,
+	}
+
+	refreshBody, err := json.Marshal(refreshPayload)
+	if err != nil {
+		panic("Failed to marshal refresh payload: " + err.Error())
+	}
+	refreshReq, err := http.NewRequest("POST", "/api/auth/refresh", bytes.NewBuffer(refreshBody))
+	if err != nil {
+		panic("Failed to create refresh request: " + err.Error())
+	}
+	refreshReq.Header.Set("Content-Type", "application/json")
+	refreshW := httptest.NewRecorder()
+	router.ServeHTTP(refreshW, refreshReq)
+
+	// Check the response status code
+	assert.Equal(t, http.StatusOK, refreshW.Code, "Expected status code 200 OK")
+
+	// CHeck the response body
+	var refreshResponse map[string]interface{}
+	json.Unmarshal(refreshW.Body.Bytes(), &refreshResponse)
+	assert.NotEmpty(t, refreshResponse["access_token"], "Expected new access token to be present")
+	assert.NotEmpty(t, refreshResponse["refresh_token"], "Expected new refresh token to be present")
+
+	// Check the new refresh token is different from the old one
+	assert.NotEqual(t, refreshToken, refreshResponse["refresh_token"], "Expected new refresh token")
+
+	// Check the new access token is different from the old one
+	assert.NotEqual(t, accessToken, refreshResponse["access_token"], "Expected new access token")
 }
