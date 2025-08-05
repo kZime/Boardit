@@ -5,6 +5,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -31,6 +32,7 @@ func Register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		fmt.Println("Register error:", err.Error())
 		return
 	}
 
@@ -38,6 +40,7 @@ func Register(c *gin.Context) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "hash password error"})
+		fmt.Println("Hash password error:", err.Error())
 		return
 	}
 
@@ -49,6 +52,7 @@ func Register(c *gin.Context) {
 	}
 	if err := database.DB.Create(&user).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username or email already exists"})
+		fmt.Println("Database error:", err.Error())
 		return
 	}
 

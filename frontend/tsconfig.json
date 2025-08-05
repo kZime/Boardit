@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    // 开启 React 17+ 的新 JSX 转换
+    "jsx": "react-jsx",
+    // 加入 DOM 相关类型
+    "lib": ["dom", "dom.iterable", "esnext"],
+    // 加上 Vite 客户端类型
+    "types": ["vite/client"],
+    // 其他按模板保留...
+      "moduleResolution": "node",
+  }
+}
