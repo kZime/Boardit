@@ -43,8 +43,12 @@ jobs:
 
       # Step 4: Install dependencies
       - name: Install dependencies
-        run: go mod tidy
+        run: |
+          cd backend
+          go mod tidy
 
       # Step 5: Run tests
       - name: Run tests
-        run: go test ./... -v
+        run: |
+          cd backend
+          go test ./... -v
