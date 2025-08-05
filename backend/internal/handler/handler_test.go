@@ -192,3 +192,54 @@ func TestRefresh(t *testing.T) {
 	// Check the new access token is different from the old one
 	assert.NotEqual(t, accessToken, refreshResponse["access_token"], "Expected new access token")
 }
+
+func TestGetCurrentUserSuccess(t *testing.T) {
+	// Set up router
+	gin.SetMode(gin.TestMode)
+
+	// Create router and bind handler
+	router := gin.Default()
+	router.GET("/api/user", GetCurrentUser)
+	router.POST("/api/auth/login", Login)
+	
+	// First, log in to get tokens
+	payload := loginRequest{
+		Email:    "test@example.com",
+		Password: "testpassword",
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		panic("Failed to marshal payload: " + err.Error())
+	}
+	req, err := http.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(body))
+	if err != nil {
+		panic("Failed to create request: " + err.Error())
+	}
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Parse the response to get the access token
+	var loginResponse map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &loginResponse)
+	accessToken := loginResponse["access_token"].(string)
+
+	// Use the access token to get current user info
+	userReq, err := http.NewRequest("GET", "/api/user", nil)
+	if err != nil {
+		panic("Failed to create user request: " + err.Error())
+	}
+	userReq.Header.Set("Authorization", "Bearer "+accessToken)
+	userW := httptest.NewRecorder()
+	router.ServeHTTP(userW, userReq)
+
+	// Check the response status code
+	assert.Equal(t, http.StatusOK, userW.Code, "Expected status code 200 OK")
+
+	// Check the response body
+	var userResponse map[string] interface{}
+	json.Unmarshal(userW.Body.Bytes(), &userResponse)
+	assert.Equal(t, "testuser", userResponse["username"], "Expected username to be 'testuser'")
+	assert.Equal(t, "test@example.com", userResponse["email"], "Expected email to be 'test@example.com'")
+	assert.NotEmpty(t, userResponse["id"], "Expected user ID to be present")
+}
