@@ -57,21 +57,6 @@ jobs:
   test-macos:
     runs-on: macos-latest
 
-    # services:
-    #   postgres:
-    #     image: postgres:15
-    #     env:
-    #       POSTGRES_USER: test
-    #       POSTGRES_PASSWORD: test
-    #       POSTGRES_DB: testdb
-    #     ports:
-    #       - 5432:5432
-    #     options: >-
-    #       --health-cmd="pg_isready -U test -d testdb"
-    #       --health-interval=10s
-    #       --health-timeout=5s
-    #       --health-retries=5
-
     steps:
       # Step 0: Install and setup PostgreSQL
       - name: Install and setup PostgreSQL
@@ -82,15 +67,22 @@ jobs:
           # Wait for PostgreSQL to be ready
           sleep 10
 
-          # Find PostgreSQL installation path and create test database and user
+          # Ensure psql is on PATH for keg-only installs
           PG_PATH=$(brew --prefix postgresql@15)
           export PATH="$PG_PATH/bin:$PATH"
 
-          # Create test database and user using psql
-          psql postgres -c "CREATE DATABASE testdb;"
-          psql -d testdb -c "CREATE USER test WITH PASSWORD 'test';"
-          psql -d testdb -c "GRANT ALL PRIVILEGES ON DATABASE testdb TO test;"
-          psql -d testdb -c "ALTER USER test CREATEDB;"
+          # Create app user first, then create the DB owned by that user
+          psql postgres -c "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'test') THEN CREATE USER test WITH PASSWORD 'test' LOGIN; END IF; END $$;"
+          psql postgres -c "DROP DATABASE IF EXISTS testdb;"
+          psql postgres -c "CREATE DATABASE testdb OWNER test;"
+
+          # On Postgres 15+, non-owners cannot CREATE in schema public by default
+          # Make sure our test user owns/has perms on the public schema in testdb
+          psql -d testdb -c "ALTER SCHEMA public OWNER TO test;"
+          psql -d testdb -c "GRANT USAGE, CREATE ON SCHEMA public TO test;"
+
+          # (Optional but harmless) ensure full DB privileges
+          psql postgres -c "GRANT ALL PRIVILEGES ON DATABASE testdb TO test;"
 
       # Step 1: Checkout the code
       - name: Checkout code
