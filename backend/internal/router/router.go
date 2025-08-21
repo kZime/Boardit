@@ -35,9 +35,10 @@ func Setup() *gin.Engine {
 		notes := v1.Group("/notes")
 		{
 			notes.POST("", handler.CreateNote)
+			notes.GET("", handler.GetNote)
 		}
-		folders := v1.Group("/folders")
-		tree := v1.Group("/tree")
+		//folders := v1.Group("/folders")
+		//tree := v1.Group("/tree")
 	}
 
 	r.GET("/api/user", middleware.JWTMiddleware(), handler.GetCurrentUser)

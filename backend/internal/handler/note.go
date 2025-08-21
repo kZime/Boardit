@@ -14,6 +14,66 @@ import (
 )
 
 // ------------------------------------------------------------
+// Get Note
+// ------------------------------------------------------------
+
+func GetNote(c *gin.Context) {
+	// Get parameters
+	folderID := c.Query("folder_id")
+	searchQuery := c.Query("q")
+	status := c.Query("status")
+	limit := c.Query("limit")
+	offset := c.Query("offset")
+
+	// Get user ID from JWT token
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "UNAUTHORIZED",
+			"message": "invalid token",
+		})
+		return
+	}
+	// Build query
+	query := database.DB.Where("user_id = ?", userID)
+
+	// Apply filters
+	if folderID != "" {
+		query = query.Where("folder_id = ?", folderID)
+	}
+	if searchQuery != "" {
+		query = query.Where("title LIKE ? OR content_md LIKE ?", "%"+searchQuery+"%", "%"+searchQuery+"%")
+	}
+	
+	if status != "" {
+		query = query.Where("is_published = ?", status == "published")
+	}
+
+	// Apply pagination
+	query = query.Order("created_at DESC").Limit(limit).Offset(offset)
+
+	// Get notes
+	var notes []model.Note
+	if err := query.Find(&notes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "INTERNAL",
+			"message": "Failed to get notes",
+		})
+		return
+	}
+
+	// Return the notes
+	c.JSON(http.StatusOK, gin.H{
+		"items": notes,
+		"total": len(notes),
+		"limit": limit,
+		"offset": offset,
+	})
+
+}
+
+
+// ------------------------------------------------------------
 // Create Note
 // ------------------------------------------------------------
 
