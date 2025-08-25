@@ -34,11 +34,19 @@ func Setup() *gin.Engine {
 	{
 		notes := v1.Group("/notes")
 		{
-			notes.POST("", handler.CreateNote)
-			notes.GET("", handler.GetNote)
+			notes.POST("", handler.CreateNote)           // POST /api/v1/notes
+			notes.GET("", handler.ListNotes)             // GET /api/v1/notes (列表)
+			notes.GET("/:id", handler.GetNote)           // GET /api/v1/notes/{id}
+			notes.PATCH("/:id", handler.UpdateNote)      // PATCH /api/v1/notes/{id}
+			notes.DELETE("/:id", handler.DeleteNote)     // DELETE /api/v1/notes/{id}
 		}
-		//folders := v1.Group("/folders")
-		//tree := v1.Group("/tree")
+		// folders := v1.Group("/folders")
+		// {
+
+		// }
+		// tree := v1.Group("/tree")
+		// {
+		// }
 	}
 
 	r.GET("/api/user", middleware.JWTMiddleware(), handler.GetCurrentUser)
