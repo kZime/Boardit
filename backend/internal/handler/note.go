@@ -638,3 +638,276 @@ func DeleteNote(c *gin.Context) {
 	// Return success
 	c.Status(http.StatusNoContent)
 }
+
+// ------------------------------------------------------------
+// Create Folder
+// POST /api/v1/folders
+// Body:
+// - name: string
+// - parent_id: uint
+// ------------------------------------------------------------
+
+type createFolderRequest struct {
+	Name string `json:"name" binding:"required"`
+	ParentID *uint `json:"parent_id"`
+}
+
+func CreateFolder(c *gin.Context) {
+	var request createFolderRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "VALIDATION_ERROR",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Get user ID from JWT token
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "UNAUTHORIZED",
+			"message": "invalid user ID",
+		})
+		return
+	}
+
+	// Name is required, no need for default value
+	
+	// Create folder
+	folder := model.Folder {
+		UserID: userID.(uint),
+		Name: request.Name,
+		ParentID: request.ParentID,
+		SortOrder: 0,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Save to database
+	if err := database.DB.Create(&folder).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "INTERNAL",
+			"message": "Failed to create folder",
+		})
+		return
+	}
+
+	// Return the created folder
+	response := gin.H{
+		"id": folder.ID,
+		"user_id": folder.UserID,
+		"name": folder.Name,
+		"parent_id": folder.ParentID,
+		"sort_order": folder.SortOrder,
+		"created_at": folder.CreatedAt.Format(time.RFC3339),
+		"updated_at": folder.UpdatedAt.Format(time.RFC3339),
+	}
+	
+	c.JSON(http.StatusCreated, response)
+}
+
+// ------------------------------------------------------------
+// Update Folder
+// PATCH /api/v1/folders/{id}
+// Body:
+// - name: string
+// - parent_id: uint
+// ------------------------------------------------------------
+
+type updateFolderRequest struct {
+	Name string `json:"name"`
+	ParentID *uint `json:"parent_id"`
+}
+
+func UpdateFolder(c *gin.Context) {
+	// Get folder ID from path
+	idStr := c.Param("id")
+
+	// Validate ID is a number
+	idInt, err := strconv.ParseInt(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "VALIDATION_ERROR",
+			"message": "invalid folder ID",
+		})
+		return
+	}
+	folderID := uint(idInt)
+
+	// Get user ID from JWT token
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "UNAUTHORIZED",
+			"message": "invalid user ID",
+		})
+		return
+	}
+
+	// Get request body
+	var req updateFolderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "VALIDATION_ERROR",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Get folder
+	var folder model.Folder
+	if err := database.DB.Where("id = ? AND user_id = ?", folderID, userID).First(&folder).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "NOT_FOUND",
+				"message": "folder not found",
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "INTERNAL",
+				"message": "Failed to get folder",
+			})
+		}
+		return
+	}
+
+	// Update folder fields
+	hasChanges := false
+
+	if req.Name != "" {
+		folder.Name = req.Name
+		hasChanges = true
+	}
+	
+	if req.ParentID != nil {
+		folder.ParentID = req.ParentID
+		hasChanges = true
+	}
+
+	// If no changes, return current folder (idempotent)
+	if !hasChanges {
+		response := gin.H{
+			"id": folder.ID,
+			"user_id": folder.UserID,
+			"name": folder.Name,
+			"sort_order": folder.SortOrder,
+			"created_at": folder.CreatedAt.Format(time.RFC3339),
+			"updated_at": folder.UpdatedAt.Format(time.RFC3339),
+		}
+		
+		if folder.ParentID != nil {
+			response["parent_id"] = *folder.ParentID
+		} else {
+			response["parent_id"] = nil
+		}
+
+		c.JSON(http.StatusOK, response)
+		return
+	}
+
+	// Update timestamp
+	folder.UpdatedAt = time.Now()
+
+	// Save to database
+	if err := database.DB.Save(&folder).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "INTERNAL",
+			"message": "Failed to update folder",
+		})
+		return
+	}
+	
+	// Return updated folder
+	response := gin.H{
+		"id": folder.ID,
+		"user_id": folder.UserID,
+		"name": folder.Name,
+		"sort_order": folder.SortOrder,
+		"created_at": folder.CreatedAt.Format(time.RFC3339),
+		"updated_at": folder.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if folder.ParentID != nil {
+		response["parent_id"] = *folder.ParentID
+	} else {
+		response["parent_id"] = nil
+	}
+
+	c.JSON(http.StatusOK, response)	
+}
+
+// ------------------------------------------------------------
+// Delete Folder
+// DELETE /api/v1/folders/{id}
+// ------------------------------------------------------------
+
+func DeleteFolder(c *gin.Context) {
+	// Get folder ID from path
+	idStr := c.Param("id")
+	
+	// Validate ID is a number
+	idInt, err := strconv.ParseInt(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "VALIDATION_ERROR",
+			"message": "invalid folder ID",
+		})
+		return
+	}
+	folderID := uint(idInt)
+
+	// Get user ID from JWT token
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "UNAUTHORIZED",
+			"message": "invalid user ID",
+		})
+		return
+	}
+
+	// Get folder
+	var folder model.Folder
+	if err := database.DB.Where("id = ? AND user_id = ?", folderID, userID).First(&folder).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "NOT_FOUND",
+				"message": "folder not found",
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "INTERNAL",
+				"message": "Failed to get folder",
+			})
+		}
+		return
+	}
+
+	// Check if folder is empty (no subfolders or notes)
+	var subfolderCount int64
+	database.DB.Model(&model.Folder{}).Where("parent_id = ?", folderID).Count(&subfolderCount)
+	
+	var noteCount int64
+	database.DB.Model(&model.Note{}).Where("folder_id = ?", folderID).Count(&noteCount)
+	
+	if subfolderCount > 0 || noteCount > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "VALIDATION_ERROR",
+			"message": "folder is not empty",
+		})
+		return
+	}
+
+	// Delete folder
+	if err := database.DB.Delete(&folder).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "INTERNAL",
+			"message": "Failed to delete folder",
+		})
+		return
+	}
+
+	// Return success
+	c.Status(http.StatusNoContent)
+}
