@@ -162,7 +162,7 @@
 * **Body** (All fields are optional)
 
   ```json
-  { "title": "Untitled", "folder_id": 3, "content_md": "# New note", "slug": "new-note" }
+  { "title": "Untitled", "folder_id": 3, "content_md": "# New note" }
   ```
 
 * **201**
@@ -193,7 +193,6 @@
     "content_md": "# Edited ...",
     "is_published": false,
     "visibility": "private",
-    "slug": "new-slug",
     "updated_at": "2025-08-13T21:31:12Z"
   }
   ```

@@ -223,7 +223,6 @@ paths:
               title: Untitled
               folder_id: 3
               content_md: "# New note"
-              slug: new-note
       responses:
         "201":
           description: Created
@@ -302,7 +301,6 @@ paths:
               content_md: "# Edited ..."
               is_published: false
               visibility: private
-              slug: new-slug
               updated_at: "2025-08-13T21:31:12Z"
       responses:
         "200":
@@ -577,7 +575,6 @@ components:
         title: { type: string }
         folder_id: { type: integer, format: int64, nullable: true }
         content_md: { type: string }
-        slug: { type: string, nullable: true }
 
     UpdateNoteRequest:
       type: object
@@ -589,7 +586,6 @@ components:
         visibility:
           type: string
           enum: [private, unlisted, public]
-        slug: { type: string, nullable: true }
         updated_at:
           {
             type: string,

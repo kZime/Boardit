@@ -115,14 +115,12 @@ func ListNotes(c *gin.Context) {
 // - title: string
 // - folder_id: uint
 // - content_md: string
-// - slug: string
 // ------------------------------------------------------------
 
 type createNoteRequest struct {
-	Title     string `json:"title" binding:"required"`
+	Title     string `json:"title"`
 	FolderID  *uint  `json:"folder_id"`
-	ContentMd string `json:"content_md" binding:"required"`
-	Slug      string `json:"slug"`
+	ContentMd string `json:"content_md"`
 }
 
 func CreateNote(c *gin.Context) {
@@ -153,30 +151,8 @@ func CreateNote(c *gin.Context) {
 		req.ContentMd = "# New note"
 	}
 
-	// Generate slug if not provided
-	if req.Slug == "" {
-		req.Slug = generateSlug(req.Title)
-	}
-
-	// Validate slug format
-	if err := validateSlug(req.Slug); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": err.Error(),
-		})
-		return
-	}
-
-	// Check if slug already exists for this user
-	var existingNote model.Note
-	if err := database.DB.Where("user_id = ? AND slug = ?", userID, req.Slug).First(&existingNote).Error; err == nil {
-		// Slug already exists
-		c.JSON(http.StatusConflict, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "slug already exists",
-		})
-		return
-	}
+	// Generate unique slug based on title
+	slug := generateUniqueSlug(req.Title, userID.(uint), nil)
 
 	// Validate that the folder exists and belongs to the current user
 	var folder model.Folder
@@ -198,7 +174,7 @@ func CreateNote(c *gin.Context) {
 		UserID:      userID.(uint),
 		FolderID:    req.FolderID,
 		Title:       req.Title,
-		Slug:        req.Slug,
+		Slug:        slug,
 		ContentMd:   req.ContentMd,
 		ContentHtml: contentHtml,
 		IsPublished: false,
@@ -269,21 +245,38 @@ func generateSlug(title string) string {
 	return slug
 }
 
-func validateSlug(slug string) error {
-	if len(slug) < 3 {
-		return fmt.Errorf("slug too short (minimum 3 characters)")
+func generateUniqueSlug(title string, userID uint, excludeNoteID *uint) string {
+	baseSlug := generateSlug(title)
+	
+	// Check if base slug is available
+	var count int64
+	query := database.DB.Where("user_id = ? AND slug = ?", userID, baseSlug)
+	if excludeNoteID != nil {
+		query = query.Where("id != ?", *excludeNoteID)
 	}
-	if len(slug) > 100 {
-		return fmt.Errorf("slug too long (maximum 100 characters)")
+	query.Model(&model.Note{}).Count(&count)
+	
+	if count == 0 {
+		return baseSlug
 	}
 	
-	// Check if slug contains only valid characters
-	reg := regexp.MustCompile("^[a-z0-9-]+$")
-	if !reg.MatchString(slug) {
-		return fmt.Errorf("slug contains invalid characters (only lowercase letters, numbers, and hyphens allowed)")
+	// If there's a conflict, add numeric suffix
+	for i := 2; i <= 999; i++ {
+		candidateSlug := fmt.Sprintf("%s-%d", baseSlug, i)
+		query := database.DB.Where("user_id = ? AND slug = ?", userID, candidateSlug)
+		if excludeNoteID != nil {
+			query = query.Where("id != ?", *excludeNoteID)
+		}
+		query.Model(&model.Note{}).Count(&count)
+		
+		if count == 0 {
+			return candidateSlug
+		}
 	}
 	
-	return nil
+	// Fallback: use timestamp suffix if we somehow exhaust numeric options
+	timestamp := time.Now().Unix()
+	return fmt.Sprintf("%s-%d", baseSlug, timestamp)
 }
 
 func convertMarkdownToHTML(markdown string) string {
@@ -394,10 +387,8 @@ func GetNote(c *gin.Context) {
 // Body:
 // - title: string
 // - content_md: string
-// - slug: string
 // - is_published: bool
 // - visibility: string
-// - sort_order: int
 // ------------------------------------------------------------
 
 type updateNoteRequest struct {
@@ -501,7 +492,7 @@ func UpdateNote(c *gin.Context) {
 	
 	if req.Title != nil {
 		note.Title = *req.Title
-		note.Slug = generateSlug(*req.Title)
+		note.Slug = generateUniqueSlug(*req.Title, userID.(uint), &noteID)
 		hasChanges = true
 	}
 	
