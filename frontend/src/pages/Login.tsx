@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 
+// Check if we're in mock mode
+const isMockMode = import.meta.env.DEV && import.meta.env.VITE_USE_MSW === 'true';
+
 export default function Login() {
   const { login } = useAuth();
   const nav = useNavigate();
@@ -21,6 +24,18 @@ export default function Login() {
       } else {
         setErr('LOGIN FAILED');
       }
+    }
+  };
+
+  // Development skip login function
+  const handleSkipLogin = async () => {
+    if (!isMockMode) return;
+    try {
+      // Use fake credentials for mock mode
+      await login('dev@example.com', 'password');
+      nav('/editor');
+    } catch (e) {
+      console.error('Skip login failed:', e);
     }
   };
 
@@ -45,6 +60,18 @@ export default function Login() {
       <button type="submit" className="w-full p-2 bg-blue-500 text-white rounded">
         LOGIN
       </button>
+      
+      {/* Development Skip Login Button - Only visible in mock mode */}
+      {isMockMode && (
+        <button 
+          type="button" 
+          onClick={handleSkipLogin}
+          className="w-full mt-2 p-2 bg-orange-500 text-white rounded text-sm"
+        >
+          🚀 DEV: Skip Login (Mock Mode)
+        </button>
+      )}
+      
       <p className="mt-2 text-sm">
         No account? <Link to="/register" className="text-blue-400">REGISTER</Link>
       </p>

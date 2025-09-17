@@ -3,7 +3,14 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { BrowserRouter } from 'react-router-dom';
+
+
+
+
 import './index.css';
+import '@mdxeditor/editor/style.css';  // 再引入 MDXEditor 样式（覆盖前面的重置）
+
+
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 

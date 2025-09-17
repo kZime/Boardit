@@ -1,11 +1,7 @@
 import { setupWorker } from 'msw/browser'
 import { http, HttpResponse } from 'msw'
+import { noteMockHandlers } from './notes'
 import {
-  getListNotesMockHandler,
-  getCreateNoteMockHandler,
-  getGetNoteMockHandler,
-  getUpdateNoteMockHandler,
-  getDeleteNoteMockHandler,
   getCreateFolderMockHandler,
   getUpdateFolderMockHandler,
   getDeleteFolderMockHandler,
@@ -16,11 +12,9 @@ import { FAKE_ACCESS, FAKE_REFRESH } from './tokens'
 // replace the real handlers with fake ones
 // FOR DEBUG ONLY
 const mocks = [
-  getListNotesMockHandler(),
-  getCreateNoteMockHandler(),
-  getGetNoteMockHandler(),
-  getUpdateNoteMockHandler(),
-  getDeleteNoteMockHandler(),
+  // Custom notes handlers with in-memory DB
+  ...noteMockHandlers,
+  // Keep other API mocks as generated
   getCreateFolderMockHandler(),
   getUpdateFolderMockHandler(),
   getDeleteFolderMockHandler(),
