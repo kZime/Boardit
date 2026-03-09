@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     setToken(null);
-    window.location.href = '/login';
+    // SPA: PrivateRoute will redirect to /login when token is null
   };
 
   // (optional) check token expiration and auto logout
