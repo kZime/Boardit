@@ -1,6 +1,6 @@
 // src/pages/Editor.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 // Tailwind styles
@@ -27,6 +27,8 @@ import {
   Separator,
 } from "@mdxeditor/editor";
 
+import ReactMarkdown from "react-markdown";
+
 // Orval generated hooks
 import {
   useListNotes,
@@ -39,6 +41,7 @@ import type { CreateNoteRequest } from "../api/gen/models/createNoteRequest";
 import type { UpdateNoteRequest } from "../api/gen/models/updateNoteRequest";
 
 export default function Editor() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const noteIdFromUrl = searchParams.get("noteId");
   const { logout } = useAuth();
@@ -70,6 +73,9 @@ export default function Editor() {
 
   // Delete confirmation modal: note to delete or null
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
+
+  // Edit vs Preview mode
+  const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
 
   // Last saved snapshot for dirty check (refs so beforeunload can read)
   const lastSavedRef = useRef<{
@@ -354,12 +360,24 @@ export default function Editor() {
           >
             ☰
           </button>
-          <span className="font-medium">Editor</span>
+          <Link
+            to="/"
+            onClick={(e) => {
+              if (isDirtyRef.current && !window.confirm("You have unsaved changes. Leave anyway?")) {
+                e.preventDefault();
+              }
+            }}
+            className="font-medium text-gray-800 hover:underline"
+          >
+            Blogedit
+          </Link>
+          <span className="text-gray-400 font-normal">/ Editor</span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
               if (isDirtyRef.current && !window.confirm("You have unsaved changes. Leave anyway?")) return;
+              navigate("/");
               logout();
             }}
             className="text-red-500 hover:underline"
@@ -453,75 +471,128 @@ export default function Editor() {
           {currentNoteId ? (
             // Show editor when a note is selected
             <>
-              {/* Page Title */}
-              <div className="mb-4">
+              {/* Page Title + visibility badge */}
+              <div className="mb-4 flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   value={pageDetails.title}
                   onChange={(e) =>
                     handlePageDetailsChange("title", e.target.value)
                   }
-                  className="w-full text-2xl font-bold bg-transparent border-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded-md focus:px-3 focus:py-2 transition-all duration-200"
+                  className="flex-1 min-w-0 text-2xl font-bold bg-transparent border-none outline-none focus:bg-white focus:border focus:border-gray-300 focus:rounded-md focus:px-3 focus:py-2 transition-all duration-200"
                   placeholder="Enter page title..."
                 />
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0 ${
+                    pageDetails.visibility === "public"
+                      ? "bg-green-100 text-green-800"
+                      : pageDetails.visibility === "unlisted"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {pageDetails.visibility === "public"
+                    ? "Public"
+                    : pageDetails.visibility === "unlisted"
+                      ? "Unlisted"
+                      : "Private"}
+                </span>
               </div>
 
-              <div className="bg-white rounded-xl p-4 shadow-sm">
-                <MDXEditor
-                  key={currentNoteId || "new"}
-                  ref={editorRef}
-                  className="min-h-[70vh]"
-                  contentEditableClassName="prose"
-                  markdown={md}
-                  onChange={setMd}
-                  plugins={[
-                    toolbarPlugin({
-                      toolbarContents: () => (
-                        <>
-                          <UndoRedo />
-                          <Separator />
-                          <BlockTypeSelect />
-                          <Separator />
-                          <BoldItalicUnderlineToggles />
-                          <Separator />
-                          <ListsToggle />
-                          <Separator />
-                          <CreateLink />
-                          <Separator />
-                          <CodeToggle />
-                        </>
-                      ),
-                    }),
-                    headingsPlugin(),
-                    listsPlugin(),
-                    linkPlugin(),
-                    quotePlugin(),
-                    codeBlockPlugin(),
-                    markdownShortcutPlugin(), // Place last
-                  ]}
-                />
+              {/* Edit / Preview toggle */}
+              <div className="flex gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("edit")}
+                  className={`px-3 py-1.5 text-sm rounded-md ${
+                    viewMode === "edit"
+                      ? "bg-gray-800 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("preview")}
+                  className={`px-3 py-1.5 text-sm rounded-md ${
+                    viewMode === "preview"
+                      ? "bg-gray-800 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  Preview
+                </button>
               </div>
 
-              {/* Button container - aligned to the right with proper spacing */}
-              <div className="mt-4 flex justify-end gap-5">
-                <button
-                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-                  onClick={handleEditPage}
-                >
-                  Edit Details
-                </button>
-                <button
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={handleSave}
-                  disabled={
-                    updateNoteMutation.isPending || createNoteMutation.isPending
-                  }
-                >
-                  {updateNoteMutation.isPending || createNoteMutation.isPending
-                    ? "Saving..."
-                    : "Save"}
-                </button>
-              </div>
+              {viewMode === "edit" ? (
+                <>
+                  <div className="bg-white rounded-xl p-4 shadow-sm">
+                    <MDXEditor
+                      key={currentNoteId || "new"}
+                      ref={editorRef}
+                      className="min-h-[70vh]"
+                      contentEditableClassName="prose"
+                      markdown={md}
+                      onChange={setMd}
+                      plugins={[
+                        toolbarPlugin({
+                          toolbarContents: () => (
+                            <>
+                              <UndoRedo />
+                              <Separator />
+                              <BlockTypeSelect />
+                              <Separator />
+                              <BoldItalicUnderlineToggles />
+                              <Separator />
+                              <ListsToggle />
+                              <Separator />
+                              <CreateLink />
+                              <Separator />
+                              <CodeToggle />
+                            </>
+                          ),
+                        }),
+                        headingsPlugin(),
+                        listsPlugin(),
+                        linkPlugin(),
+                        quotePlugin(),
+                        codeBlockPlugin(),
+                        markdownShortcutPlugin(), // Place last
+                      ]}
+                    />
+                  </div>
+
+                  <div className="mt-4 flex justify-end gap-5">
+                    <button
+                      className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                      onClick={handleEditPage}
+                    >
+                      Edit Details
+                    </button>
+                    <button
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={handleSave}
+                      disabled={
+                        updateNoteMutation.isPending || createNoteMutation.isPending
+                      }
+                    >
+                      {updateNoteMutation.isPending || createNoteMutation.isPending
+                        ? "Saving..."
+                        : "Save"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white rounded-xl p-6 shadow-sm min-h-[70vh]">
+                  <div className="prose prose-gray max-w-none">
+                    <h1 className="text-2xl font-bold text-gray-800 mb-4">
+                      {pageDetails.title || "Untitled"}
+                    </h1>
+                    <ReactMarkdown>{md || ""}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             // Show welcome message when no note is selected
