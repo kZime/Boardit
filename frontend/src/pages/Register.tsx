@@ -14,7 +14,7 @@ export default function Register() {
     e.preventDefault();
     try {
       await register(username, email, password);
-      nav('/login');
+      nav('/editor');
     } catch (e: unknown) {
       if (typeof e === 'object' && e !== null && 'response' in e) {
         const error = e as { response?: { data?: { error?: string } } };
