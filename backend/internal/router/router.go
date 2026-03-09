@@ -3,6 +3,8 @@ package router
 import (
 	"backend/internal/handler"
 	"backend/internal/middleware"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -12,10 +14,18 @@ import (
 func Setup() *gin.Engine {
 	r := gin.Default()
 
-	// Configure CORS
+	origins := os.Getenv("CORS_ORIGINS")
+	if origins == "" {
+		origins = "http://localhost:5173"
+	}
+	allowOrigins := strings.Split(strings.TrimSpace(origins), ",")
+	for i := range allowOrigins {
+		allowOrigins[i] = strings.TrimSpace(allowOrigins[i])
+	}
+
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"}, // Vite and other common dev ports
-		AllowMethods:     []string{"GET", "POST", "PUT", "OPTIONS"},
+		AllowOrigins:     allowOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -25,7 +35,6 @@ func Setup() *gin.Engine {
 	auth := r.Group("/api/auth")
 	{
 		auth.POST("/register", handler.Register)
-		// TODO: add login, refresh
 		auth.POST("/login", handler.Login)
 		auth.POST("/refresh", handler.Refresh)
 	}
