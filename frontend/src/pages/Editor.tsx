@@ -68,6 +68,24 @@ export default function Editor() {
   // Save success notification state
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
+  // Last saved snapshot for dirty check (refs so beforeunload can read)
+  const lastSavedRef = useRef<{
+    md: string;
+    title: string;
+    visibility: "private" | "public" | "unlisted";
+  }>({ md: defaultMd, title: defaultTitle, visibility: "private" });
+  const isDirtyRef = useRef(false);
+  useEffect(() => {
+    if (!currentNoteId) {
+      isDirtyRef.current = false;
+      return;
+    }
+    isDirtyRef.current =
+      md !== lastSavedRef.current.md ||
+      pageDetails.title !== lastSavedRef.current.title ||
+      pageDetails.visibility !== lastSavedRef.current.visibility;
+  }, [currentNoteId, md, pageDetails.title, pageDetails.visibility]);
+
   // Load notes list
   const {
     data,
@@ -90,24 +108,49 @@ export default function Editor() {
     if (Number.isNaN(id)) return;
     const note = items.find((n: Note) => n.id === id);
     if (note) {
+      const title = note.title || "Untitled";
+      const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
       setCurrentNoteId(note.id);
       setMd(note.content_md || "");
       setPageDetails({
-        title: note.title || "Untitled",
+        title,
         description: "",
         tags: "",
-        visibility: (note.visibility as "private" | "public" | "unlisted") || "private",
+        visibility: vis,
       });
+      lastSavedRef.current = { md: note.content_md || "", title, visibility: vis };
     }
   }, [noteIdFromUrl, isLoading, items]);
 
-  // ESC key closes sidebar (mobile friendly)
+  // Ref for save handler so keydown effect can call latest handleSave without deps
+  const saveHandlerRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
+  // ESC closes sidebar; Cmd/Ctrl+S saves
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        void saveHandlerRef.current();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // beforeunload when there are unsaved changes
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
   // Mutation hooks
@@ -127,14 +170,17 @@ export default function Editor() {
         data: newNoteData,
       });
       if (result.data) {
+        const title = result.data.title || defaultTitle;
+        const vis = result.data.visibility || "private";
         setCurrentNoteId(result.data.id);
         setMd(result.data.content_md || "");
         setPageDetails({
-          title: result.data.title || defaultTitle,
+          title,
           description: "",
           tags: "",
-          visibility: result.data.visibility || "private",
+          visibility: vis,
         });
+        lastSavedRef.current = { md: result.data.content_md || "", title, visibility: vis };
         refetchNotes(); // Refresh the notes list
       }
     } catch (error) {
@@ -186,6 +232,11 @@ export default function Editor() {
         data: updateData,
       });
       refetchNotes(); // Refresh the notes list
+      lastSavedRef.current = {
+        md,
+        title: pageDetails.title,
+        visibility: pageDetails.visibility,
+      };
 
       // Show success notification
       setShowSaveSuccess(true);
@@ -196,16 +247,20 @@ export default function Editor() {
       console.error("Failed to save note:", error);
     }
   };
+  saveHandlerRef.current = handleSave;
 
   const handleSelectNote = (note: Note) => {
+    const title = note.title || "Untitled";
+    const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
     setCurrentNoteId(note.id);
     setMd(note.content_md || "");
     setPageDetails({
-      title: note.title || "Untitled",
+      title,
       description: "",
       tags: "",
-      visibility: note.visibility || "private",
+      visibility: vis,
     });
+    lastSavedRef.current = { md: note.content_md || "", title, visibility: vis };
 
     // Force MDXEditor to update its content
     setTimeout(() => {
@@ -241,6 +296,11 @@ export default function Editor() {
         data: updateData,
       });
       refetchNotes();
+      lastSavedRef.current = {
+        md,
+        title: pageDetails.title,
+        visibility: pageDetails.visibility,
+      };
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
       setShowEditModal(false);
@@ -296,7 +356,13 @@ export default function Editor() {
           <span className="font-medium">Editor</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={logout} className="text-red-500 hover:underline">
+          <button
+            onClick={() => {
+              if (isDirtyRef.current && !window.confirm("You have unsaved changes. Leave anyway?")) return;
+              logout();
+            }}
+            className="text-red-500 hover:underline"
+          >
             Logout
           </button>
         </div>
