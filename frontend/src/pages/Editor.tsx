@@ -224,10 +224,29 @@ export default function Editor() {
     setShowEditModal(false);
   };
 
-  const handleSavePageDetails = () => {
-    console.log("[Notes] saving page details:", pageDetails);
-    // TODO: Implement actual save logic
-    setShowEditModal(false);
+  const handleSavePageDetails = async () => {
+    if (!currentNoteId) {
+      setShowEditModal(false);
+      return;
+    }
+    try {
+      const updateData: UpdateNoteRequest = {
+        title: pageDetails.title,
+        content_md: md,
+        is_published: pageDetails.visibility === "public",
+        visibility: pageDetails.visibility as "private" | "public" | "unlisted",
+      };
+      await updateNoteMutation.mutateAsync({
+        id: currentNoteId,
+        data: updateData,
+      });
+      refetchNotes();
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 3000);
+      setShowEditModal(false);
+    } catch (error) {
+      console.error("Failed to save page details:", error);
+    }
   };
 
   const handlePageDetailsChange = async (field: string, value: string) => {
