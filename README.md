@@ -2,6 +2,10 @@
 
 A full-stack blog/note editor with Markdown support, folder organization, and JWT authentication.
 
+- **Home** (`/`): Public post list — all published posts with `visibility: public`.
+- **Post detail** (`/post/:username/:slug`): Read-only view; unlisted posts are accessible by direct link.
+- **Editor** (`/editor`): Create and edit notes (login required); set visibility and publish to show on the home page.
+
 ## Tech Stack
 
 | Layer | Technologies |
@@ -31,7 +35,7 @@ Blogedit/
     │   ├── api/gen/          # Auto-generated API client (do not edit)
     │   ├── contexts/         # Auth context (JWT storage)
     │   ├── mocks/            # MSW mock handlers
-    │   └── pages/            # Login · Register · Editor
+    │   └── pages/            # PostList · PostDetail · Login · Register · Editor
     └── orval.config.cjs      # API codegen config
 ```
 
@@ -148,6 +152,8 @@ npm run orval
 | POST | `/api/auth/login` | — | Login → tokens |
 | POST | `/api/auth/refresh` | — | Refresh tokens |
 | GET | `/api/user` | JWT | Current user |
+| GET | `/api/v1/public/notes` | — | List public notes (no auth) |
+| GET | `/api/v1/public/notes/:username/:slug` | — | Get public note by username and slug (no auth) |
 | GET | `/api/v1/notes` | JWT | List notes |
 | POST | `/api/v1/notes` | JWT | Create note |
 | GET | `/api/v1/notes/:id` | JWT | Get note |

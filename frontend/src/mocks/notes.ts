@@ -155,11 +155,63 @@ export const deleteNoteHandler = http.delete('*/api/v1/notes/:id', async ({ para
   return new HttpResponse(null, { status: 204 })
 })
 
+const MOCK_AUTHOR_USERNAME = 'demo'
+
+// GET /api/v1/public/notes — list public notes (no auth)
+export const listPublicNotesHandler = http.get('*/api/v1/public/notes', async ({ request }) => {
+  const url = new URL(request.url)
+  const limit = Math.max(0, Math.min(200, parseInt(url.searchParams.get('limit') || '50', 10)))
+  const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10))
+  const publicNotes = notesDb.filter(
+    n => n.visibility === NoteVisibility.public && n.is_published
+  )
+  const total = publicNotes.length
+  const slice = publicNotes.slice(offset, offset + limit)
+  const items = slice.map(n => {
+    const excerpt = n.content_md.length > 200 ? n.content_md.slice(0, 200) + '...' : n.content_md
+    return {
+      id: n.id,
+      title: n.title,
+      slug: n.slug,
+      user_id: n.user_id,
+      author_username: MOCK_AUTHOR_USERNAME,
+      excerpt,
+      created_at: n.created_at,
+      updated_at: n.updated_at,
+    }
+  })
+  return HttpResponse.json({ items, total, limit, offset })
+})
+
+// GET /api/v1/public/notes/:username/:slug — get public note by username and slug (no auth)
+export const getPublicNoteHandler = http.get(
+  '*/api/v1/public/notes/:username/:slug',
+  async ({ params }) => {
+    const { username, slug } = params
+    if (!username || !slug) return new HttpResponse('Bad Request', { status: 400 })
+    if (username !== MOCK_AUTHOR_USERNAME) return new HttpResponse('Not Found', { status: 404 })
+    const note = notesDb.find(
+      n =>
+        n.slug === slug &&
+        n.user_id === 1 &&
+        (n.visibility === NoteVisibility.public || n.visibility === NoteVisibility.unlisted) &&
+        n.is_published
+    )
+    if (!note) return new HttpResponse('Not Found', { status: 404 })
+    return HttpResponse.json({
+      ...note,
+      author_username: MOCK_AUTHOR_USERNAME,
+    })
+  }
+)
+
 export const noteMockHandlers = [
   listNotesHandler,
   createNoteHandler,
   getNoteHandler,
   updateNoteHandler,
   deleteNoteHandler,
+  listPublicNotesHandler,
+  getPublicNoteHandler,
 ]
 

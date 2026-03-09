@@ -1005,3 +1005,158 @@ func ReorderTree(c *gin.Context) {
 	// Return success
 	c.Status(http.StatusOK)
 }
+
+// ------------------------------------------------------------
+// List Public Notes (no auth)
+// GET /api/v1/public/notes
+// Query: limit, offset
+// ------------------------------------------------------------
+
+func ListPublicNotes(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	var notes []model.Note
+	query := database.DB.Where("visibility = ? AND is_published = ?", "public", true).
+		Order("updated_at DESC").Limit(limit).Offset(offset)
+	if err := query.Find(&notes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "INTERNAL",
+			"message": "Failed to get public notes",
+		})
+		return
+	}
+
+	var total int64
+	database.DB.Model(&model.Note{}).Where("visibility = ? AND is_published = ?", "public", true).Count(&total)
+
+	if len(notes) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"items":  []gin.H{},
+			"total":  total,
+			"limit":  limit,
+			"offset": offset,
+		})
+		return
+	}
+
+	userIDs := make([]uint, 0, len(notes))
+	for _, n := range notes {
+		userIDs = append(userIDs, n.UserID)
+	}
+	var users []struct {
+		ID       uint   `gorm:"column:id"`
+		Username string `gorm:"column:username"`
+	}
+	database.DB.Model(&model.User{}).Where("id IN ?", userIDs).Select("id", "username").Find(&users)
+	usernameByID := make(map[uint]string)
+	for _, u := range users {
+		usernameByID[u.ID] = u.Username
+	}
+
+	items := make([]gin.H, 0, len(notes))
+	for _, n := range notes {
+		excerpt := n.ContentMd
+		if len([]rune(excerpt)) > 200 {
+			excerpt = string([]rune(excerpt)[:200]) + "..."
+		}
+		items = append(items, gin.H{
+			"id":               n.ID,
+			"title":            n.Title,
+			"slug":             n.Slug,
+			"user_id":         n.UserID,
+			"author_username": usernameByID[n.UserID],
+			"excerpt":          excerpt,
+			"created_at":       n.CreatedAt.Format(time.RFC3339),
+			"updated_at":       n.UpdatedAt.Format(time.RFC3339),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":  items,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// ------------------------------------------------------------
+// Get Public Note by username and slug (no auth)
+// GET /api/v1/public/notes/:username/:slug
+// ------------------------------------------------------------
+
+func GetPublicNote(c *gin.Context) {
+	username := c.Param("username")
+	slug := c.Param("slug")
+	if username == "" || slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "VALIDATION_ERROR",
+			"message": "username and slug required",
+		})
+		return
+	}
+
+	var user model.User
+	if err := database.DB.Where("username = ?", username).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "NOT_FOUND",
+				"message": "user not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "INTERNAL",
+			"message": "Failed to get user",
+		})
+		return
+	}
+
+	var note model.Note
+	if err := database.DB.Where("user_id = ? AND slug = ? AND visibility IN ? AND is_published = ?",
+		user.ID, slug, []string{"public", "unlisted"}, true).First(&note).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "NOT_FOUND",
+				"message": "note not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "INTERNAL",
+			"message": "Failed to get note",
+		})
+		return
+	}
+
+	resp := gin.H{
+		"id":           note.ID,
+		"user_id":      note.UserID,
+		"title":        note.Title,
+		"slug":         note.Slug,
+		"content_md":   note.ContentMd,
+		"content_html": note.ContentHtml,
+		"is_published": note.IsPublished,
+		"visibility":   note.Visibility,
+		"created_at":   note.CreatedAt.Format(time.RFC3339),
+		"updated_at":   note.UpdatedAt.Format(time.RFC3339),
+		"author_username": user.Username,
+	}
+	if note.FolderID != nil {
+		resp["folder_id"] = *note.FolderID
+	} else {
+		resp["folder_id"] = nil
+	}
+	c.JSON(http.StatusOK, resp)
+}

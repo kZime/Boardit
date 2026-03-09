@@ -1,5 +1,6 @@
 // src/pages/Editor.tsx
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 // Tailwind styles
@@ -38,6 +39,8 @@ import type { CreateNoteRequest } from "../api/gen/models/createNoteRequest";
 import type { UpdateNoteRequest } from "../api/gen/models/updateNoteRequest";
 
 export default function Editor() {
+  const [searchParams] = useSearchParams();
+  const noteIdFromUrl = searchParams.get("noteId");
   const { logout } = useAuth();
   const editorRef = useRef<MDXEditorMethods>(null);
 
@@ -78,6 +81,25 @@ export default function Editor() {
   //   currentNoteId!,
   //   { enabled: !!currentNoteId }
   // )
+
+  // Open note from URL ?noteId= when notes have loaded
+  const items = data?.data?.items ?? [];
+  useEffect(() => {
+    if (!noteIdFromUrl || isLoading || items.length === 0) return;
+    const id = parseInt(noteIdFromUrl, 10);
+    if (Number.isNaN(id)) return;
+    const note = items.find((n: Note) => n.id === id);
+    if (note) {
+      setCurrentNoteId(note.id);
+      setMd(note.content_md || "");
+      setPageDetails({
+        title: note.title || "Untitled",
+        description: "",
+        tags: "",
+        visibility: (note.visibility as "private" | "public" | "unlisted") || "private",
+      });
+    }
+  }, [noteIdFromUrl, isLoading, items]);
 
   // ESC key closes sidebar (mobile friendly)
   useEffect(() => {
