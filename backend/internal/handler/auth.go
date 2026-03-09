@@ -13,6 +13,7 @@ import (
 
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -33,7 +34,7 @@ func Register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Warn("register validation failed", "err", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -41,7 +42,7 @@ func Register(c *gin.Context) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		slog.Error("hash password failed", "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "hash password error"})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "hash password error")
 		return
 	}
 
@@ -53,7 +54,7 @@ func Register(c *gin.Context) {
 	}
 	if err := database.DB.Create(&user).Error; err != nil {
 		slog.Warn("register db create failed", "err", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "username or email already exists"})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "username or email already exists")
 		return
 	}
 
@@ -83,19 +84,19 @@ type loginRequest struct {
 func Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	// 1. find user
 	var user model.User
 	if err := database.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid credentials")
 		return
 	}
 	// 2. compare password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid credentials")
 		return
 	}
 
@@ -107,7 +108,7 @@ func Login(c *gin.Context) {
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 	accessToken, err := at.SignedString(jwtKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign access token error"})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign access token error")
 		return
 	}
 
@@ -115,7 +116,7 @@ func Login(c *gin.Context) {
 	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtClaims)
 	refreshToken, err := rt.SignedString(jwtKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign refresh token error"})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign refresh token error")
 		return
 	}
 
@@ -136,7 +137,7 @@ type refreshRequest struct {
 func Refresh(c *gin.Context) {
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -150,17 +151,17 @@ func Refresh(c *gin.Context) {
 		return jwtKey, nil
 	})
 	if err != nil || !token.Valid {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid refresh token")
 		return
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token claims")
 		return
 	}
 	sub, ok := claims["sub"].(float64)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid sub claim"})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid sub claim")
 		return
 	}
 	userID := uint(sub)
@@ -170,7 +171,7 @@ func Refresh(c *gin.Context) {
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 	newAccessToken, err := at.SignedString(jwtKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign access token error"})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign access token error")
 		return
 	}
 
@@ -178,7 +179,7 @@ func Refresh(c *gin.Context) {
 	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtClaims)
 	newRefreshToken, err := rt.SignedString(jwtKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign refresh token error"})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign refresh token error")
 		return
 	}
 

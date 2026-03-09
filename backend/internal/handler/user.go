@@ -6,6 +6,7 @@ import (
 
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,13 +15,13 @@ func GetCurrentUser(c *gin.Context) {
 	// ASSUME 'userID' is written into context in JWTMiddleware
 	userIDInterface, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
 		return
 	}
 
 	userID, ok := userIDInterface.(uint)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user ID format"})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "invalid user ID format")
 		return
 	}
 
@@ -28,7 +29,7 @@ func GetCurrentUser(c *gin.Context) {
 
 	// get user by id
 	if err := database.DB.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		response.Error(c, http.StatusNotFound, "NOT_FOUND", "user not found")
 		return
 	}
 

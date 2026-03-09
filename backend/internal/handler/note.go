@@ -4,6 +4,7 @@ package handler
 import (
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/response"
 	"errors"
 	"fmt"
 	"net/http"
@@ -56,10 +57,7 @@ func ListNotes(c *gin.Context) {
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid token",
-		})
+			response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
 		return
 	}
 	// Build query
@@ -91,10 +89,7 @@ func ListNotes(c *gin.Context) {
 	// Get notes
 	var notes []model.Note
 	if err := query.Find(&notes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to get notes",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get notes")
 		return
 	}
 
@@ -126,20 +121,14 @@ type createNoteRequest struct {
 func CreateNote(c *gin.Context) {
 	var req createNoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": err.Error(),
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid token",
-		})
+			response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
 		return
 	}
 
@@ -158,10 +147,7 @@ func CreateNote(c *gin.Context) {
 	var folder model.Folder
 	if req.FolderID != nil {
 		if err := database.DB.Where("id = ? AND user_id = ?", *req.FolderID, userID).First(&folder).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "VALIDATION_ERROR",
-				"message": "folder not found or access denied",
-			})
+			response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "folder not found or access denied")
 			return
 		}
 	}
@@ -185,10 +171,7 @@ func CreateNote(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&note).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to create note",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to create note")
 		return
 	}
 
@@ -321,10 +304,7 @@ func GetNote(c *gin.Context) {
 	// Validate ID is a number
 	idInt, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "invalid note ID",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "invalid note ID")
 		return
 	}
 	noteID := uint(idInt)
@@ -332,10 +312,7 @@ func GetNote(c *gin.Context) {
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid user ID",
-		})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid user ID")
 		return
 	}
 
@@ -343,15 +320,9 @@ func GetNote(c *gin.Context) {
 	var note model.Note
 	if err := database.DB.Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "NOT_FOUND",
-				"message": "note not found",
-			})
+			response.Error(c, http.StatusNotFound, "NOT_FOUND", "note not found")
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "INTERNAL",
-				"message": "Failed to get note",
-			})
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get note")
 		}
 		return
 	}
@@ -407,10 +378,7 @@ func UpdateNote(c *gin.Context) {
 	// Validate ID is a number
 	idInt, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "invalid note ID",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "invalid note ID")
 		return
 	}
 	noteID := uint(idInt)
@@ -418,20 +386,14 @@ func UpdateNote(c *gin.Context) {
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid user ID",
-		})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid user ID")
 		return
 	}
 
 	// Parse request body
 	var req updateNoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": err.Error(),
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -439,15 +401,9 @@ func UpdateNote(c *gin.Context) {
 	var note model.Note
 	if err := database.DB.Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "NOT_FOUND",
-				"message": "note not found",
-			})
+			response.Error(c, http.StatusNotFound, "NOT_FOUND", "note not found")
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "INTERNAL",
-				"message": "Failed to get note",
-			})
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get note")
 		}
 		return
 	}
@@ -456,10 +412,7 @@ func UpdateNote(c *gin.Context) {
 	if req.UpdatedAt != "" {
 		expectedTime, err := time.Parse(time.RFC3339, req.UpdatedAt)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "VALIDATION_ERROR",
-				"message": "invalid updated_at format",
-			})
+			response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "invalid updated_at format")
 			return
 		}
 		
@@ -548,10 +501,7 @@ func UpdateNote(c *gin.Context) {
 
 	// Save to database
 	if err := database.DB.Save(&note).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to update note",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to update note")
 		return
 	}
 
@@ -591,10 +541,7 @@ func DeleteNote(c *gin.Context) {
 	// Validate ID is a number
 	idInt, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "invalid note ID",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "invalid note ID")
 		return
 	}
 	noteID := uint(idInt)
@@ -602,10 +549,7 @@ func DeleteNote(c *gin.Context) {
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid user ID",
-		})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid user ID")
 		return
 	}
 
@@ -613,25 +557,16 @@ func DeleteNote(c *gin.Context) {
 	var note model.Note
 	if err := database.DB.Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "NOT_FOUND",
-				"message": "note not found",
-			})
+			response.Error(c, http.StatusNotFound, "NOT_FOUND", "note not found")
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "INTERNAL",
-				"message": "Failed to get note",
-			})
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get note")
 		}
 		return
 	}
 
 	// Delete note
 	if err := database.DB.Delete(&note).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to delete note",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to delete note")
 		return
 	}
 	
@@ -655,20 +590,14 @@ type createFolderRequest struct {
 func CreateFolder(c *gin.Context) {
 	var request createFolderRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": err.Error(),
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid user ID",
-		})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid user ID")
 		return
 	}
 
@@ -686,10 +615,7 @@ func CreateFolder(c *gin.Context) {
 
 	// Save to database
 	if err := database.DB.Create(&folder).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to create folder",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to create folder")
 		return
 	}
 
@@ -727,10 +653,7 @@ func UpdateFolder(c *gin.Context) {
 	// Validate ID is a number
 	idInt, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "invalid folder ID",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "invalid folder ID")
 		return
 	}
 	folderID := uint(idInt)
@@ -738,20 +661,14 @@ func UpdateFolder(c *gin.Context) {
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid user ID",
-		})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid user ID")
 		return
 	}
 
 	// Get request body
 	var req updateFolderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": err.Error(),
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -759,15 +676,9 @@ func UpdateFolder(c *gin.Context) {
 	var folder model.Folder
 	if err := database.DB.Where("id = ? AND user_id = ?", folderID, userID).First(&folder).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "NOT_FOUND",
-				"message": "folder not found",
-			})
+			response.Error(c, http.StatusNotFound, "NOT_FOUND", "folder not found")
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "INTERNAL",
-				"message": "Failed to get folder",
-			})
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get folder")
 		}
 		return
 	}
@@ -811,10 +722,7 @@ func UpdateFolder(c *gin.Context) {
 
 	// Save to database
 	if err := database.DB.Save(&folder).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to update folder",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to update folder")
 		return
 	}
 	
@@ -849,10 +757,7 @@ func DeleteFolder(c *gin.Context) {
 	// Validate ID is a number
 	idInt, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "invalid folder ID",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "invalid folder ID")
 		return
 	}
 	folderID := uint(idInt)
@@ -860,10 +765,7 @@ func DeleteFolder(c *gin.Context) {
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid user ID",
-		})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid user ID")
 		return
 	}
 
@@ -871,15 +773,9 @@ func DeleteFolder(c *gin.Context) {
 	var folder model.Folder
 	if err := database.DB.Where("id = ? AND user_id = ?", folderID, userID).First(&folder).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "NOT_FOUND",
-				"message": "folder not found",
-			})
+			response.Error(c, http.StatusNotFound, "NOT_FOUND", "folder not found")
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "INTERNAL",
-				"message": "Failed to get folder",
-			})
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get folder")
 		}
 		return
 	}
@@ -892,19 +788,13 @@ func DeleteFolder(c *gin.Context) {
 	database.DB.Model(&model.Note{}).Where("folder_id = ?", folderID).Count(&noteCount)
 	
 	if subfolderCount > 0 || noteCount > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "folder is not empty",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "folder is not empty")
 		return
 	}
 
 	// Delete folder
 	if err := database.DB.Delete(&folder).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to delete folder",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to delete folder")
 		return
 	}
 
@@ -935,20 +825,14 @@ type reorderTreeRequest struct {
 func ReorderTree(c *gin.Context) {
 	var req reorderTreeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "invalid payload",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "invalid payload")
 		return
 	}
 	
 	// Get user ID from JWT token
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "UNAUTHORIZED",
-			"message": "invalid user ID",
-		})
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid user ID")
 		return
 	}
 
@@ -957,24 +841,15 @@ func ReorderTree(c *gin.Context) {
 		var f model.Folder
 		if err := database.DB.Where("id = ? AND user_id = ?", folder.ID, userID).First(&f).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{
-					"error":   "NOT_FOUND",
-					"message": "folder not found",
-				})
+				response.Error(c, http.StatusNotFound, "NOT_FOUND", "folder not found")
 			} else {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":   "INTERNAL",
-					"message": "Failed to get folder",
-				})
+				response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get folder")
 			}
 			return
 		}
 		f.SortOrder = folder.SortOrder
 		if err := database.DB.Save(&f).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "INTERNAL",
-				"message": "Failed to update folder",
-			})
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to update folder")
 			return
 		}
 	}
@@ -984,20 +859,14 @@ func ReorderTree(c *gin.Context) {
 		var n model.Note
 		if err := database.DB.Where("id = ? AND user_id = ?", note.ID, userID).First(&n).Error; err != nil {
 						if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{
-					"error":   "NOT_FOUND",
-					"message": "note not found",
-				})
+				response.Error(c, http.StatusNotFound, "NOT_FOUND", "note not found")
 				return
 			}
 		}
 		n.SortOrder = note.SortOrder
 		n.FolderID = note.FolderID
 		if err := database.DB.Save(&n).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "INTERNAL",
-				"message": "Failed to update note",
-			})
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to update note")
 			return
 		}
 	}
@@ -1031,10 +900,7 @@ func ListPublicNotes(c *gin.Context) {
 	query := database.DB.Where("visibility = ? AND is_published = ?", "public", true).
 		Order("updated_at DESC").Limit(limit).Offset(offset)
 	if err := query.Find(&notes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to get public notes",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get public notes")
 		return
 	}
 
@@ -1100,26 +966,17 @@ func GetPublicNote(c *gin.Context) {
 	username := c.Param("username")
 	slug := c.Param("slug")
 	if username == "" || slug == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "VALIDATION_ERROR",
-			"message": "username and slug required",
-		})
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "username and slug required")
 		return
 	}
 
 	var user model.User
 	if err := database.DB.Where("username = ?", username).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "NOT_FOUND",
-				"message": "user not found",
-			})
+			response.Error(c, http.StatusNotFound, "NOT_FOUND", "user not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to get user",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get user")
 		return
 	}
 
@@ -1127,16 +984,10 @@ func GetPublicNote(c *gin.Context) {
 	if err := database.DB.Where("user_id = ? AND slug = ? AND visibility IN ? AND is_published = ?",
 		user.ID, slug, []string{"public", "unlisted"}, true).First(&note).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "NOT_FOUND",
-				"message": "note not found",
-			})
+			response.Error(c, http.StatusNotFound, "NOT_FOUND", "note not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "INTERNAL",
-			"message": "Failed to get note",
-		})
+		response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get note")
 		return
 	}
 
