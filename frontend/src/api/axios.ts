@@ -3,7 +3,6 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { getAccessToken, setAccessToken, getRefreshToken } from '../contexts/AuthContext'
 
 const api = axios.create({
-  // TODO: use env variable
   baseURL: import.meta.env.VITE_API_BASE_URL || '/',
 })
 
