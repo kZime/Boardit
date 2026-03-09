@@ -68,6 +68,9 @@ export default function Editor() {
   // Save success notification state
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
+  // Delete confirmation modal: note to delete or null
+  const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
+
   // Last saved snapshot for dirty check (refs so beforeunload can read)
   const lastSavedRef = useRef<{
     md: string;
@@ -189,11 +192,8 @@ export default function Editor() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this note?")) return;
-
     try {
       await deleteNoteMutation.mutateAsync({ id });
-      // If we're deleting the currently open note, clear the editor
       if (currentNoteId === id) {
         setCurrentNoteId(null);
         setMd(
@@ -206,7 +206,8 @@ export default function Editor() {
           visibility: "private",
         });
       }
-      refetchNotes(); // Refresh the notes list
+      refetchNotes();
+      setNoteToDelete(null);
     } catch (error) {
       console.error("Failed to delete note:", error);
     }
@@ -430,7 +431,7 @@ export default function Editor() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(n.id);
+                        setNoteToDelete(n);
                       }}
                       className="text-xs text-gray-500 px-1 py-0.5 rounded hover:bg-red-100 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                       title="Delete"
@@ -722,6 +723,41 @@ export default function Editor() {
                 className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete note confirmation modal */}
+      {noteToDelete && (
+        <div
+          className="fixed inset-0 bg-gray-900/20 flex items-center justify-center z-50"
+          onClick={() => setNoteToDelete(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-800">Delete note?</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                “{noteToDelete.title || "Untitled"}” will be permanently deleted. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t">
+              <button
+                onClick={() => setNoteToDelete(null)}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDelete(noteToDelete.id)}
+                disabled={deleteNoteMutation.isPending}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleteNoteMutation.isPending ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>
