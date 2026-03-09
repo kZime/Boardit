@@ -53,17 +53,23 @@ func Init() error {
 	return nil
 }
 
-// TruncateAllTables deletes all data from tables in dependency order.
-// Works with both PostgreSQL and SQLite (used in tests).
+// TruncateAllTables deletes all data from tables.
+// On PostgreSQL uses TRUNCATE ... RESTART IDENTITY CASCADE for reliable test isolation.
+// On SQLite uses DELETE (TRUNCATE not supported).
 func TruncateAllTables() error {
 	if DB == nil {
 		return nil
 	}
-	// Order: note_revisions → notes → folders → users
-	for _, table := range []string{"note_revisions", "notes", "folders", "users"} {
-		if err := DB.Exec("DELETE FROM " + table).Error; err != nil {
-			return err
+	dsn := os.Getenv("DATABASE_DSN")
+	if dsn == ":memory:" || strings.Contains(dsn, "sqlite") {
+		// SQLite: delete in dependency order
+		for _, table := range []string{"note_revisions", "notes", "folders", "users"} {
+			if err := DB.Exec("DELETE FROM " + table).Error; err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-	return nil
+	// PostgreSQL: single TRUNCATE with CASCADE and identity reset
+	return DB.Exec("TRUNCATE TABLE note_revisions, notes, folders, users RESTART IDENTITY CASCADE").Error
 }

@@ -38,11 +38,11 @@ func (suite *RouterTestSuite) SetupSuite() {
 }
 
 func (suite *RouterTestSuite) TearDownSuite() {
-	_ = database.TruncateAllTables()
+	suite.Require().NoError(database.TruncateAllTables())
 }
 
 func (suite *RouterTestSuite) SetupTest() {
-	_ = database.TruncateAllTables()
+	suite.Require().NoError(database.TruncateAllTables())
 }
 
 func (suite *RouterTestSuite) TestAuthRoutes() {

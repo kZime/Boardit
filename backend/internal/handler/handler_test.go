@@ -49,12 +49,12 @@ func (suite *AuthTestSuite) SetupSuite() {
 }
 
 func (suite *AuthTestSuite) TearDownSuite() {
-	_ = database.TruncateAllTables()
+	suite.Require().NoError(database.TruncateAllTables())
 }
 
 func (suite *AuthTestSuite) SetupTest() {
 	// Clean up before each test to ensure isolation (works with both Postgres and SQLite)
-	_ = database.TruncateAllTables()
+	suite.Require().NoError(database.TruncateAllTables())
 	// Reset test state
 	suite.userID = 0
 	suite.accessToken = ""
