@@ -606,6 +606,7 @@ components:
         folder_id: { type: integer, format: int64, nullable: true }
         title: { type: string }
         slug: { type: string, nullable: true }
+        cover_url: { type: string, nullable: true }
         content_md: { type: string }
         content_html: { type: string }
         is_published: { type: boolean }
@@ -629,6 +630,7 @@ components:
       properties:
         title: { type: string }
         folder_id: { type: integer, format: int64, nullable: true }
+        cover_url: { type: string, nullable: true }
         content_md: { type: string }
         is_published: { type: boolean }
         visibility:
@@ -662,6 +664,7 @@ components:
         user_id: { type: integer, format: int64 }
         author_username: { type: string }
         excerpt: { type: string }
+        cover_url: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
