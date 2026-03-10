@@ -16,7 +16,7 @@ interface AuthContextType {
 }
 const AuthContext = createContext<AuthContextType>({} as any);
 
-// 供拦截器拿当前 token
+// Exposed for Axios interceptor to get the current token
 export function getAccessToken(): string | null {
   return localStorage.getItem('accessToken');
 }

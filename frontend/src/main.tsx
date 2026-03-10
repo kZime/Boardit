@@ -9,7 +9,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 
 import './index.css';
-import '@mdxeditor/editor/style.css';  // 再引入 MDXEditor 样式（覆盖前面的重置）
+import '@mdxeditor/editor/style.css';  // Import MDXEditor styles after Tailwind resets
 
 
 

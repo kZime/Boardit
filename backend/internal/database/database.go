@@ -41,10 +41,10 @@ func Init() error {
 
 	// Auto migrate all models in dependency order
 	if err := db.AutoMigrate(
-		&model.User{},        // 1. 用户表（被其他表依赖）
-		&model.Folder{},      // 2. 文件夹表（依赖用户表）
-		&model.Note{},        // 3. 笔记表（依赖用户表和文件夹表）
-		&model.NoteRevision{}, // 4. 笔记版本表（依赖笔记表）
+		&model.User{},         // 1. User table (depended on by others)
+		&model.Folder{},       // 2. Folder table (depends on user)
+		&model.Note{},         // 3. Note table (depends on user and folder)
+		&model.NoteRevision{}, // 4. Note revision table (depends on note)
 	); err != nil {
 		return fmt.Errorf("failed to auto migrate models: %w", err)
 	}
