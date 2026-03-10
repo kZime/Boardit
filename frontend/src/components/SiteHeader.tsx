@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useAuthModal } from "../contexts/AuthModalContext";
 
 export interface SiteHeaderProps {
   showPostsLink?: boolean;
@@ -8,6 +9,7 @@ export interface SiteHeaderProps {
 
 export default function SiteHeader({ showPostsLink, editLink }: SiteHeaderProps) {
   const { accessToken } = useAuth();
+  const { openLoginModal, openRegisterModal } = useAuthModal();
 
   return (
     <header className="border-b bg-white">
@@ -35,12 +37,12 @@ export default function SiteHeader({ showPostsLink, editLink }: SiteHeaderProps)
             </>
           ) : (
             <>
-              <Link to="/login" className="text-gray-600 hover:underline">
+              <button type="button" onClick={openLoginModal} className="text-gray-600 hover:underline">
                 Login
-              </Link>
-              <Link to="/register" className="text-gray-600 hover:underline">
+              </button>
+              <button type="button" onClick={openRegisterModal} className="text-gray-600 hover:underline">
                 Register
-              </Link>
+              </button>
             </>
           )}
         </nav>

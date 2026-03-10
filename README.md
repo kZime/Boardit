@@ -170,6 +170,26 @@ The app will be available on port 80. To allow it through the firewall: `sudo uf
 - **backend**: Go service; it waits for PostgreSQL to be healthy before starting. GORM runs migrations on first run.
 - **frontend**: Multi-stage build (Node build + Nginx serving static files) and reverse-proxies `/api` to the backend, so the app is same-origin and CORS does not need extra configuration.
 
+### Updating after you push
+
+On the server, pull the latest code and rebuild/restart the stack:
+
+```bash
+cd /path/to/Blogedit   # or wherever you cloned the repo
+git pull
+docker compose up -d --build
+```
+
+- `git pull` gets the latest commit.
+- `docker compose up -d --build` rebuilds images that changed (backend/frontend from source), leaves `postgres` and its volume as-is, and restarts only the services that need it.
+
+Optional: clean old images and build cache to free disk space:
+
+```bash
+docker image prune -f
+# or more aggressively: docker system prune -f
+```
+
 ### Other deployment options
 
 | Scenario | Option |
