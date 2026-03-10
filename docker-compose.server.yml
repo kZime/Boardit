@@ -1,0 +1,12 @@
+# for server deployment
+services:
+  frontend:
+    networks:
+      default:
+      reverse-proxy:
+        aliases:
+          - boardit-frontend
+
+networks:
+  reverse-proxy:
+    external: true
