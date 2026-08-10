@@ -5,6 +5,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"backend/internal/testutils"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
+	"gorm.io/gorm"
 )
 
 // AuthTestSuite holds shared state for auth tests
@@ -415,6 +417,41 @@ func (suite *AuthTestSuite) TestLogoutRevokesRefreshSession() {
 	refreshW := httptest.NewRecorder()
 	suite.router.ServeHTTP(refreshW, refreshReq)
 	suite.Equal(http.StatusUnauthorized, refreshW.Code)
+}
+
+func (suite *AuthTestSuite) TestLogoutReportsRefreshSessionRevokeFailure() {
+	suite.registerTestUser()
+	suite.loginTestUser()
+	body, err := json.Marshal(refreshRequest{RefreshToken: suite.refreshToken})
+	suite.NoError(err)
+
+	const callbackName = "test:fail_logout_refresh_session_update"
+	callback := database.DB.Callback().Update()
+	suite.Require().NoError(callback.Before("gorm:update").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table == "refresh_sessions" {
+			tx.AddError(errors.New("forced refresh session update failure"))
+		}
+	}))
+	callbackRemoved := false
+	defer func() {
+		if !callbackRemoved {
+			suite.NoError(callback.Remove(callbackName))
+		}
+	}()
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/auth/logout", bytes.NewBuffer(body))
+	logoutReq.Header.Set("Content-Type", "application/json")
+	logoutW := httptest.NewRecorder()
+	suite.router.ServeHTTP(logoutW, logoutReq)
+	suite.Equal(http.StatusInternalServerError, logoutW.Code)
+
+	suite.Require().NoError(callback.Remove(callbackName))
+	callbackRemoved = true
+	refreshReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewBuffer(body))
+	refreshReq.Header.Set("Content-Type", "application/json")
+	refreshW := httptest.NewRecorder()
+	suite.router.ServeHTTP(refreshW, refreshReq)
+	suite.Equal(http.StatusOK, refreshW.Code)
 }
 
 func (suite *AuthTestSuite) TestRefreshRejectsAccessToken() {

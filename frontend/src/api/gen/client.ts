@@ -297,7 +297,7 @@ export const authLogout = (
 
 
 
-export const getAuthLogoutMutationOptions = <TError = unknown,
+export const getAuthLogoutMutationOptions = <TError = Error,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError,{data: AuthLogoutBody}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError,{data: AuthLogoutBody}, TContext> => {
 
@@ -326,12 +326,12 @@ const {mutation: mutationOptions} = options ?
 
     export type AuthLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof authLogout>>>
     export type AuthLogoutMutationBody = AuthLogoutBody
-    export type AuthLogoutMutationError = unknown
+    export type AuthLogoutMutationError = Error
 
     /**
  * @summary Revoke a refresh session
  */
-export const useAuthLogout = <TError = unknown,
+export const useAuthLogout = <TError = Error,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError,{data: AuthLogoutBody}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof authLogout>>,

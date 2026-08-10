@@ -367,9 +367,13 @@ func (handler *AuthHandler) Logout(c *gin.Context) {
 	userID, tokenID, ok := parseRefreshToken(handler.jwtSecret, req.RefreshToken)
 	if ok {
 		now := time.Now().UTC()
-		database.DB.Model(&model.RefreshSession{}).
+		result := database.DB.Model(&model.RefreshSession{}).
 			Where("user_id = ? AND token_id = ? AND revoked_at IS NULL", userID, tokenID).
 			Update("revoked_at", now)
+		if result.Error != nil {
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "revoke refresh token error")
+			return
+		}
 	}
 	c.Status(http.StatusNoContent)
 }

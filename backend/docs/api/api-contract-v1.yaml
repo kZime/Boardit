@@ -152,6 +152,15 @@ paths:
       responses:
         "204":
           description: Session revoked or already unavailable
+        "500":
+          description: Refresh session revoke failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: INTERNAL
+                message: revoke refresh token error
 
   /api/user:
     get:
