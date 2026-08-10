@@ -2,6 +2,7 @@ import { setupWorker } from 'msw/browser'
 import { http, HttpResponse } from 'msw'
 import { noteMockHandlers } from './notes'
 import {
+  getListFoldersMockHandler,
   getCreateFolderMockHandler,
   getUpdateFolderMockHandler,
   getDeleteFolderMockHandler,
@@ -15,6 +16,7 @@ const mocks = [
   // Custom notes handlers with in-memory DB
   ...noteMockHandlers,
   // Keep other API mocks as generated
+  getListFoldersMockHandler(),
   getCreateFolderMockHandler(),
   getUpdateFolderMockHandler(),
   getDeleteFolderMockHandler(),

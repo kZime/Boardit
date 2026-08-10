@@ -1,15 +1,22 @@
-name: Blog Auto CI
+name: CI
 
 on:
   push:
-    branches:
-      - unit-test #should be main for future use
-      - main
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test-ubuntu:
+  backend:
+    name: Backend tests
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:15
@@ -26,112 +33,67 @@ jobs:
           --health-retries=5
 
     steps:
-      # Step 1: Checkout the code
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      # Step 2: Set up Go
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: 1.24
-
-      # Step 3: Create .env.test file
-      - name: Create .env.test file
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+      - name: Configure test environment
         run: |
-          echo "DATABASE_DSN=host=localhost user=test password=test dbname=testdb port=5432 sslmode=disable TimeZone=UTC" > backend/.env.test
-          echo "JWT_SECRET=test-secret-for-jwt-min-32-chars!!" >> backend/.env.test
-
-      # Step 4: Install dependencies
-      - name: Install dependencies
-        run: |
-          cd backend
-          go mod tidy
-
-      # Step 5: Run tests
-      - name: Run tests
-        run: |
-          cd backend
-          go test ./... -v
+          cp backend/.env_test_sample backend/.env.test
+          sed -i 's|^DATABASE_DSN=.*|DATABASE_DSN=host=localhost user=test password=test dbname=testdb port=5432 sslmode=disable TimeZone=UTC|' backend/.env.test
+      - name: Download dependencies
+        working-directory: backend
+        run: go mod download
+      - name: Check formatting
+        working-directory: backend
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        working-directory: backend
+        run: go vet ./...
+      - name: Test
+        working-directory: backend
+        run: go test ./...
 
   frontend:
+    name: Frontend quality gates
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: "frontend/.nvmrc"
-          cache: "npm"
-          cache-dependency-path: frontend/package.json
-
-      - name: Install dependencies
-        run: |
-          cd frontend
-          rm -rf node_modules package-lock.json
-          npm install
-
-      - name: Lint
-        run: cd frontend && npm run lint
-
-      - name: Build
-        run: cd frontend && npm run build
-
-  test-macos:
-    runs-on: macos-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
 
     steps:
-      # Step 0: Install and setup PostgreSQL
-      - name: Install and setup PostgreSQL
-        run: |
-          brew install postgresql@15
-          brew services start postgresql@15
-
-          # Wait for PostgreSQL to be ready
-          sleep 10
-
-          # Ensure psql is on PATH for keg-only installs
-          PG_PATH=$(brew --prefix postgresql@15)
-          export PATH="$PG_PATH/bin:$PATH"
-
-          # Create app user first, then create the DB owned by that user
-          psql postgres -c "CREATE USER test WITH PASSWORD 'test' LOGIN;"
-          psql postgres -c "CREATE DATABASE testdb OWNER test;"
-
-          # On Postgres 15+, non-owners cannot CREATE in schema public by default
-          # Make sure our test user owns/has perms on the public schema in testdb
-          psql -d testdb -c "ALTER SCHEMA public OWNER TO test;"
-          psql -d testdb -c "GRANT USAGE, CREATE ON SCHEMA public TO test;"
-
-          # (Optional but harmless) ensure full DB privileges
-          psql postgres -c "GRANT ALL PRIVILEGES ON DATABASE testdb TO test;"
-
-      # Step 1: Checkout the code
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      # Step 2: Set up Go
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          go-version: 1.24
-
-      # Step 3: Create .env.test file
-      - name: Create .env.test file
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Verify generated API client is current
         run: |
-          echo "DATABASE_DSN=host=localhost user=test password=test dbname=testdb port=5432 sslmode=disable TimeZone=UTC" > backend/.env.test
-          echo "JWT_SECRET=test-secret-for-jwt-min-32-chars!!" >> backend/.env.test
+          npm run orval
+          git diff --exit-code -- src/api/gen
 
-      # Step 4: Install dependencies
-      - name: Install dependencies
-        run: |
-          cd backend
-          go mod tidy
+  e2e:
+    name: Browser smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
 
-      # Step 5: Run tests
-      - name: Run tests
-        run: |
-          cd backend
-          go test ./... -v
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

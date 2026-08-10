@@ -31,7 +31,7 @@ func (suite *JWTMiddlewareTestSuite) SetupSuite() {
 	// Set up router
 	gin.SetMode(gin.TestMode)
 	suite.router = gin.New()
-	
+
 	// Add a test endpoint that uses JWT middleware
 	suite.router.GET("/test", JWTMiddleware(), func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -56,13 +56,13 @@ func (suite *JWTMiddlewareTestSuite) TestValidToken() {
 	req, err := http.NewRequest("GET", "/test", nil)
 	suite.NoError(err)
 	req.Header.Set("Authorization", "Bearer "+tokenString)
-	
+
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 
 	// Check response
 	suite.Equal(http.StatusOK, w.Code)
-	
+
 	var response map[string]interface{}
 	err = suite.parseJSON(w.Body.Bytes(), &response)
 	suite.NoError(err)
@@ -73,13 +73,13 @@ func (suite *JWTMiddlewareTestSuite) TestMissingAuthorizationHeader() {
 	req, err := http.NewRequest("GET", "/test", nil)
 	suite.NoError(err)
 	// No Authorization header
-	
+
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 
 	// Check response
 	suite.Equal(http.StatusUnauthorized, w.Code)
-	
+
 	var response map[string]interface{}
 	err = suite.parseJSON(w.Body.Bytes(), &response)
 	suite.NoError(err)
@@ -89,10 +89,10 @@ func (suite *JWTMiddlewareTestSuite) TestMissingAuthorizationHeader() {
 func (suite *JWTMiddlewareTestSuite) TestInvalidAuthorizationFormat() {
 	testCases := []string{
 		"InvalidFormat",  // No space, no Bearer
-		"Basic token123",  // Wrong scheme
-		"BearerToken",  // No space between Bearer and token
-		"TokenOnly",  // No Bearer prefix
-		"Bearer",  // Missing token part (len(parts) != 2)
+		"Basic token123", // Wrong scheme
+		"BearerToken",    // No space between Bearer and token
+		"TokenOnly",      // No Bearer prefix
+		"Bearer",         // Missing token part (len(parts) != 2)
 	}
 
 	for _, authHeader := range testCases {
@@ -100,17 +100,17 @@ func (suite *JWTMiddlewareTestSuite) TestInvalidAuthorizationFormat() {
 			req, err := http.NewRequest("GET", "/test", nil)
 			suite.NoError(err)
 			req.Header.Set("Authorization", authHeader)
-			
+
 			w := httptest.NewRecorder()
 			suite.router.ServeHTTP(w, req)
 
 			// Check response
 			suite.Equal(http.StatusUnauthorized, w.Code)
-			
+
 			var response map[string]interface{}
 			err = suite.parseJSON(w.Body.Bytes(), &response)
 			suite.NoError(err)
-			suite.Equal("invalid authorization header format", response["error"], 
+			suite.Equal("invalid authorization header format", response["error"],
 				"Expected format error for header: %s", authHeader)
 		})
 	}
@@ -127,13 +127,13 @@ func (suite *JWTMiddlewareTestSuite) TestInvalidToken() {
 		req, err := http.NewRequest("GET", "/test", nil)
 		suite.NoError(err)
 		req.Header.Set("Authorization", "Bearer "+token)
-		
+
 		w := httptest.NewRecorder()
 		suite.router.ServeHTTP(w, req)
 
 		// Check response
 		suite.Equal(http.StatusUnauthorized, w.Code)
-		
+
 		var response map[string]interface{}
 		err = suite.parseJSON(w.Body.Bytes(), &response)
 		suite.NoError(err)
@@ -153,13 +153,13 @@ func (suite *JWTMiddlewareTestSuite) TestExpiredToken() {
 	req, err := http.NewRequest("GET", "/test", nil)
 	suite.NoError(err)
 	req.Header.Set("Authorization", "Bearer "+tokenString)
-	
+
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 
 	// Check response
 	suite.Equal(http.StatusUnauthorized, w.Code)
-	
+
 	var response map[string]interface{}
 	err = suite.parseJSON(w.Body.Bytes(), &response)
 	suite.NoError(err)
@@ -178,13 +178,13 @@ func (suite *JWTMiddlewareTestSuite) TestWrongSigningMethod() {
 	req, err := http.NewRequest("GET", "/test", nil)
 	suite.NoError(err)
 	req.Header.Set("Authorization", "Bearer "+tokenString)
-	
+
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 
 	// Check response
 	suite.Equal(http.StatusUnauthorized, w.Code)
-	
+
 	var response map[string]interface{}
 	err = suite.parseJSON(w.Body.Bytes(), &response)
 	suite.NoError(err)
@@ -203,13 +203,13 @@ func (suite *JWTMiddlewareTestSuite) TestMissingSubClaim() {
 	req, err := http.NewRequest("GET", "/test", nil)
 	suite.NoError(err)
 	req.Header.Set("Authorization", "Bearer "+tokenString)
-	
+
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 
 	// Check response
 	suite.Equal(http.StatusUnauthorized, w.Code)
-	
+
 	var response map[string]interface{}
 	err = suite.parseJSON(w.Body.Bytes(), &response)
 	suite.NoError(err)
@@ -228,13 +228,13 @@ func (suite *JWTMiddlewareTestSuite) TestInvalidSubClaimType() {
 	req, err := http.NewRequest("GET", "/test", nil)
 	suite.NoError(err)
 	req.Header.Set("Authorization", "Bearer "+tokenString)
-	
+
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 
 	// Check response
 	suite.Equal(http.StatusUnauthorized, w.Code)
-	
+
 	var response map[string]interface{}
 	err = suite.parseJSON(w.Body.Bytes(), &response)
 	suite.NoError(err)

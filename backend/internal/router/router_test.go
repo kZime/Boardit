@@ -151,7 +151,7 @@ func (suite *RouterTestSuite) TestMethodNotAllowed() {
 func (suite *RouterTestSuite) TestRouteStructure() {
 	// Test that all expected route groups exist by making actual requests
 	// Note: We can't use OPTIONS because Gin doesn't handle them by default
-	
+
 	// Test register route
 	suite.Run("Route exists: /api/auth/register", func() {
 		payload := map[string]interface{}{

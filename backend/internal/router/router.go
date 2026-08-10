@@ -51,16 +51,16 @@ func Setup() *gin.Engine {
 		// Public note endpoints (no JWT)
 		public := v1.Group("/public")
 		{
-			public.GET("/notes", handler.ListPublicNotes)                    // GET /api/v1/public/notes
-			public.GET("/notes/:username/:slug", handler.GetPublicNote)        // GET /api/v1/public/notes/:username/:slug
+			public.GET("/notes", handler.ListPublicNotes)               // GET /api/v1/public/notes
+			public.GET("/notes/:username/:slug", handler.GetPublicNote) // GET /api/v1/public/notes/:username/:slug
 		}
 		notes := v1.Group("/notes")
 		{
-			notes.POST("", middleware.JWTMiddleware(), handler.CreateNote)           // POST /api/v1/notes
-			notes.GET("", middleware.JWTMiddleware(), handler.ListNotes)             // GET /api/v1/notes
-			notes.GET("/:id", middleware.JWTMiddleware(), handler.GetNote)           // GET /api/v1/notes/{id}
-			notes.PATCH("/:id", middleware.JWTMiddleware(), handler.UpdateNote)     // PATCH /api/v1/notes/{id}
-			notes.DELETE("/:id", middleware.JWTMiddleware(), handler.DeleteNote)     // DELETE /api/v1/notes/{id}
+			notes.POST("", middleware.JWTMiddleware(), handler.CreateNote)       // POST /api/v1/notes
+			notes.GET("", middleware.JWTMiddleware(), handler.ListNotes)         // GET /api/v1/notes
+			notes.GET("/:id", middleware.JWTMiddleware(), handler.GetNote)       // GET /api/v1/notes/{id}
+			notes.PATCH("/:id", middleware.JWTMiddleware(), handler.UpdateNote)  // PATCH /api/v1/notes/{id}
+			notes.DELETE("/:id", middleware.JWTMiddleware(), handler.DeleteNote) // DELETE /api/v1/notes/{id}
 		}
 		folders := v1.Group("/folders")
 		{

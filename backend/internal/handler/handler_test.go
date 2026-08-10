@@ -20,9 +20,9 @@ import (
 // AuthTestSuite holds shared state for auth tests
 type AuthTestSuite struct {
 	suite.Suite
-	router      *gin.Engine
-	userID      uint
-	accessToken string
+	router       *gin.Engine
+	userID       uint
+	accessToken  string
 	refreshToken string
 }
 
@@ -125,10 +125,10 @@ func (suite *AuthTestSuite) TestLoginSuccess() {
 	var response map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	suite.NoError(err)
-	
+
 	suite.NotEmpty(response["access_token"], "Expected access token to be present")
 	suite.NotEmpty(response["refresh_token"], "Expected refresh token to be present")
-	
+
 	// Store tokens for other tests
 	suite.accessToken = response["access_token"].(string)
 	suite.refreshToken = response["refresh_token"].(string)
@@ -150,7 +150,7 @@ func (suite *AuthTestSuite) TestRefresh() {
 
 	refreshBody, err := json.Marshal(refreshPayload)
 	suite.NoError(err, "Failed to marshal refresh payload")
-	
+
 	refreshReq, err := http.NewRequest("POST", "/api/auth/refresh", bytes.NewBuffer(refreshBody))
 	suite.NoError(err, "Failed to create refresh request")
 	refreshReq.Header.Set("Content-Type", "application/json")
@@ -164,7 +164,7 @@ func (suite *AuthTestSuite) TestRefresh() {
 	var refreshResponse map[string]interface{}
 	err = json.Unmarshal(refreshW.Body.Bytes(), &refreshResponse)
 	suite.NoError(err)
-	
+
 	suite.NotEmpty(refreshResponse["access_token"], "Expected new access token to be present")
 	suite.NotEmpty(refreshResponse["refresh_token"], "Expected new refresh token to be present")
 
@@ -201,7 +201,7 @@ func (suite *AuthTestSuite) TestGetCurrentUserSuccess() {
 	var userResponse map[string]interface{}
 	err = json.Unmarshal(userW.Body.Bytes(), &userResponse)
 	suite.NoError(err)
-	
+
 	suite.Equal("testuser", userResponse["username"], "Expected username to be 'testuser'")
 	suite.Equal("test@example.com", userResponse["email"], "Expected email to be 'test@example.com'")
 	suite.NotEmpty(userResponse["id"], "Expected user ID to be present")
@@ -230,10 +230,10 @@ func (suite *AuthTestSuite) registerTestUser() {
 	var response map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	suite.NoError(err)
-	
+
 	// Check if response contains expected fields
 	suite.NotNil(response["id"], "Expected user ID to be present in response")
-	
+
 	// Safe type assertion with check
 	userIDFloat, ok := response["id"].(float64)
 	suite.True(ok, "Expected user ID to be a number")

@@ -1002,10 +1002,11 @@ export default function Editor() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="page-visibility" className="block text-sm font-medium text-gray-700 mb-1">
                   Visibility
                 </label>
                 <select
+                  id="page-visibility"
                   value={pageDetails.visibility}
                   onChange={(e) =>
                     handlePageDetailsChange("visibility", e.target.value)

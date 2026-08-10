@@ -1,10 +1,10 @@
 package database
 
 import (
-	"testing"
-	"os"
 	"github.com/stretchr/testify/assert"
-	
+	"os"
+	"testing"
+
 	"backend/internal/testutils"
 )
 
@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestInit(t *testing.T){
+func TestInit(t *testing.T) {
 	// Run init function
 	err := Init()
 
