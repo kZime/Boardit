@@ -253,6 +253,97 @@ func (suite *AuthTestSuite) TestRefresh() {
 	suite.Zero(activeSessions)
 }
 
+func (suite *AuthTestSuite) installRefreshRotationDelay(tokenID string) func() {
+	suite.T().Helper()
+	triggerSQL := fmt.Sprintf(`
+		CREATE OR REPLACE FUNCTION delay_test_refresh_rotation() RETURNS trigger AS $$
+		BEGIN
+			IF OLD.token_id = '%s' AND OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL THEN
+				PERFORM pg_sleep(0.4);
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER delay_test_refresh_rotation_trigger
+		BEFORE UPDATE ON refresh_sessions
+		FOR EACH ROW EXECUTE FUNCTION delay_test_refresh_rotation();`, tokenID)
+	suite.Require().NoError(database.DB.Exec(triggerSQL).Error)
+	return func() {
+		suite.NoError(database.DB.Exec("DROP TRIGGER IF EXISTS delay_test_refresh_rotation_trigger ON refresh_sessions").Error)
+		suite.NoError(database.DB.Exec("DROP FUNCTION IF EXISTS delay_test_refresh_rotation()").Error)
+	}
+}
+
+func (suite *AuthTestSuite) waitForRefreshFamilyLock(rootTokenID string) {
+	suite.T().Helper()
+	lockDeadline := time.Now().Add(3 * time.Second)
+	for {
+		probe := database.DB.Begin()
+		var rootID uint
+		lockErr := probe.Raw(
+			"SELECT id FROM refresh_sessions WHERE token_id = ? FOR UPDATE NOWAIT",
+			rootTokenID,
+		).Scan(&rootID).Error
+		rollbackErr := probe.Rollback().Error
+		if lockErr != nil && strings.Contains(lockErr.Error(), "55P03") {
+			return
+		}
+		suite.Require().NoError(lockErr)
+		suite.Require().NoError(rollbackErr)
+		if time.Now().After(lockDeadline) {
+			suite.T().Fatal("refresh did not acquire the family-root lock before timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (suite *AuthTestSuite) TestConcurrentRefreshWithSameTokenKeepsWinnerSessionActive() {
+	if database.DB.Dialector.Name() != "postgres" {
+		suite.T().Skip("PostgreSQL row-lock regression test")
+	}
+	suite.registerTestUser()
+	suite.loginTestUser()
+	rootToken := suite.refreshToken
+	_, rootTokenID, ok := parseRefreshToken(suite.authentication.jwtSecret, rootToken)
+	suite.Require().True(ok)
+	cleanupTrigger := suite.installRefreshRotationDelay(rootTokenID)
+	defer cleanupTrigger()
+
+	rootBody, err := json.Marshal(refreshRequest{RefreshToken: rootToken})
+	suite.NoError(err)
+	type refreshResult struct {
+		status int
+		body   []byte
+	}
+	winnerResult := make(chan refreshResult, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(rootBody))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		suite.router.ServeHTTP(w, req)
+		winnerResult <- refreshResult{status: w.Code, body: append([]byte(nil), w.Body.Bytes()...)}
+	}()
+
+	suite.waitForRefreshFamilyLock(rootTokenID)
+	loserReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(rootBody))
+	loserReq.Header.Set("Content-Type", "application/json")
+	loserW := httptest.NewRecorder()
+	suite.router.ServeHTTP(loserW, loserReq)
+	winner := <-winnerResult
+	suite.Require().Equal(http.StatusOK, winner.status)
+	suite.Equal(http.StatusUnauthorized, loserW.Code)
+
+	var winnerTokens map[string]any
+	suite.Require().NoError(json.Unmarshal(winner.body, &winnerTokens))
+	replacementBody, err := json.Marshal(refreshRequest{RefreshToken: winnerTokens["refresh_token"].(string)})
+	suite.NoError(err)
+	replacementReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(replacementBody))
+	replacementReq.Header.Set("Content-Type", "application/json")
+	replacementW := httptest.NewRecorder()
+	suite.router.ServeHTTP(replacementW, replacementReq)
+	suite.Equal(http.StatusOK, replacementW.Code)
+}
+
 func (suite *AuthTestSuite) TestConcurrentReplayRevokesSessionCreatedByDescendantRefresh() {
 	if database.DB.Dialector.Name() != "postgres" {
 		suite.T().Skip("PostgreSQL row-lock regression test")
@@ -276,23 +367,8 @@ func (suite *AuthTestSuite) TestConcurrentReplayRevokesSessionCreatedByDescendan
 	_, childTokenID, ok := parseRefreshToken(suite.authentication.jwtSecret, childToken)
 	suite.Require().True(ok)
 
-	triggerSQL := fmt.Sprintf(`
-		CREATE OR REPLACE FUNCTION delay_test_refresh_rotation() RETURNS trigger AS $$
-		BEGIN
-			IF OLD.token_id = '%s' AND OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL THEN
-				PERFORM pg_sleep(0.4);
-			END IF;
-			RETURN NEW;
-		END;
-		$$ LANGUAGE plpgsql;
-		CREATE TRIGGER delay_test_refresh_rotation_trigger
-		BEFORE UPDATE ON refresh_sessions
-		FOR EACH ROW EXECUTE FUNCTION delay_test_refresh_rotation();`, childTokenID)
-	suite.Require().NoError(database.DB.Exec(triggerSQL).Error)
-	defer func() {
-		suite.NoError(database.DB.Exec("DROP TRIGGER IF EXISTS delay_test_refresh_rotation_trigger ON refresh_sessions").Error)
-		suite.NoError(database.DB.Exec("DROP FUNCTION IF EXISTS delay_test_refresh_rotation()").Error)
-	}()
+	cleanupTrigger := suite.installRefreshRotationDelay(childTokenID)
+	defer cleanupTrigger()
 
 	childBody, err := json.Marshal(refreshRequest{RefreshToken: childToken})
 	suite.NoError(err)
@@ -305,28 +381,9 @@ func (suite *AuthTestSuite) TestConcurrentReplayRevokesSessionCreatedByDescendan
 		childStatus <- w.Code
 	}()
 
-	// Do not rely on scheduler timing. The trigger keeps the descendant
-	// rotation open while a separate transaction observes that it owns the
-	// shared family-root lock.
-	lockDeadline := time.Now().Add(3 * time.Second)
-	for {
-		probe := database.DB.Begin()
-		var rootID uint
-		lockErr := probe.Raw(
-			"SELECT id FROM refresh_sessions WHERE token_id = ? FOR UPDATE NOWAIT",
-			rootTokenID,
-		).Scan(&rootID).Error
-		rollbackErr := probe.Rollback().Error
-		if lockErr != nil && strings.Contains(lockErr.Error(), "55P03") {
-			break
-		}
-		suite.Require().NoError(lockErr)
-		suite.Require().NoError(rollbackErr)
-		if time.Now().After(lockDeadline) {
-			suite.T().Fatal("descendant refresh did not acquire the family-root lock before timeout")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	// The trigger keeps the descendant rotation open while a separate
+	// transaction proves it owns the shared family-root lock.
+	suite.waitForRefreshFamilyLock(rootTokenID)
 	replayReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(rootBody))
 	replayReq.Header.Set("Content-Type", "application/json")
 	replayW := httptest.NewRecorder()

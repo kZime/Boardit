@@ -74,9 +74,9 @@ Tree moves also advance the note version and record a revision/event. Deletion l
 
 - Login creates a short-lived access token and a persisted refresh session.
 - Refresh tokens have an explicit token type and random `jti`.
-- Refresh atomically revokes the old session and creates a replacement in the same session family. Reuse of a rotated token revokes every active session in that family and returns 401.
+- Refresh atomically revokes the old session and creates a replacement in the same session family. Requests serialize on the immutable family root: an overlapping same-token loser returns 401 without revoking the winner, while a request that begins with an already-rotated token revokes every active session in the family.
 - Logout revokes the supplied refresh session and immediately clears local browser tokens.
-- Access-token refresh requests share one frontend promise so concurrent 401 responses settle together.
+- Access-token refresh requests share one frontend promise per refresh token, so callers using a newly rotated token never join an older token's failed request. Refresh, login, logout, and atomic token-pair publication share a browser-wide Web Lock. A losing browser tab preserves and reuses a newer token pair only when its subject matches the original request and refresh token. A definitive refresh 401 clears only the still-current pair; timeouts and server failures preserve it. Retried requests pin the validated access token so a later cross-tab account change cannot overwrite their authorization header before dispatch.
 
 Refresh tokens are currently stored in localStorage. Migration to an HttpOnly cookie is an open security decision.
 

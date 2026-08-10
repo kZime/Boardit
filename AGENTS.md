@@ -31,12 +31,13 @@ Gin/router -> HTTP handler -> noteapp use-case -> repository interface -> GORM a
 - Private resources and searches are scoped by `user_id`; inaccessible resources are reported as not found.
 - AI output remains an `ai_candidate` until explicit acceptance. Candidate generation never overwrites `notes.content_md`.
 - Workers must validate `(note_id, user_id, version)` and use deduplication keys.
-- Refresh tokens are single-use server-side sessions. Rotation revokes the old session; reuse of a rotated token revokes every active session in its family; logout revokes the current session.
+- Refresh tokens are single-use server-side sessions. Rotation revokes the old session; an overlapping loser is rejected without revoking the winner, while reuse of a token that was already rotated when the request began revokes every active session in its family; logout revokes the current session.
 
 ## Frontend boundaries
 
 - React Query owns server cache; feature hooks or local reducers own editing state.
 - Token persistence lives in `src/auth/tokenStorage.ts`; Axios must not import React context.
+- Browser auth-state writers must use `withAuthStateLock`; token pairs are published atomically through `setTokens`.
 - The editor tree, metadata dialogs, save coordination, and API pagination remain separate feature modules.
 - Keep the editor route lazy-loaded. Treat the MDXEditor bundle as a known performance constraint.
 

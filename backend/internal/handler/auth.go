@@ -271,6 +271,7 @@ func (handler *AuthHandler) Refresh(c *gin.Context) {
 		if result.Error != nil {
 			return result.Error
 		}
+		wasUsableBeforeFamilyLock := session.RevokedAt == nil && session.ExpiresAt.After(now)
 		familyID := session.FamilyID
 		if familyID == "" {
 			familyID = session.TokenID
@@ -294,7 +295,12 @@ func (handler *AuthHandler) Refresh(c *gin.Context) {
 			return result.Error
 		}
 		if session.RevokedAt != nil {
-			if session.ReplacedByTokenID != nil {
+			// If this request observed an active token before waiting for the
+			// family lock, another overlapping request won the rotation. Reject
+			// this loser without revoking the winner's replacement. A request
+			// that arrived after rotation still counts as reuse and revokes the
+			// active family.
+			if session.ReplacedByTokenID != nil && !wasUsableBeforeFamilyLock {
 				if err := revokeRefreshFamily(tx, userID, familyID, now); err != nil {
 					return err
 				}
@@ -323,8 +329,10 @@ func (handler *AuthHandler) Refresh(c *gin.Context) {
 			return rotation.Error
 		}
 		if rotation.RowsAffected != 1 {
-			if err := revokeRefreshFamily(tx, userID, familyID, now); err != nil {
-				return err
+			if !wasUsableBeforeFamilyLock {
+				if err := revokeRefreshFamily(tx, userID, familyID, now); err != nil {
+					return err
+				}
 			}
 			rejected = true
 			return nil
