@@ -578,9 +578,13 @@ components:
       type: object
       required: [username, email, password]
       properties:
-        username: { type: string, minLength: 1 }
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$"
         email: { type: string, format: email }
-        password: { type: string, minLength: 6 }
+        password: { type: string, minLength: 8, maxLength: 72 }
 
     LoginRequest:
       type: object
@@ -593,9 +597,13 @@ components:
       type: object
       required: [access_token, refresh_token, expires_in]
       properties:
-        access_token: { type: string }
-        refresh_token: { type: string }
-        expires_in: { type: integer, example: 3600 }
+        access_token:
+          type: string
+          description: Short-lived JWT with an access token type claim.
+        refresh_token:
+          type: string
+          description: Long-lived JWT with a refresh token type claim and unique ID.
+        expires_in: { type: integer, example: 900 }
 
     User:
       type: object
@@ -660,7 +668,7 @@ components:
           {
             type: string,
             format: date-time,
-            description: "Required for optimistic concurrency",
+            description: "When supplied, enforces optimistic concurrency against the last response version",
           }
 
     NotesPage:

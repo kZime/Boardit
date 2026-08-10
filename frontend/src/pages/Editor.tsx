@@ -341,7 +341,7 @@ export default function Editor() {
         title: pageDetails.title,
         cover_url: pageDetails.coverUrl,
         content_md: md,
-        is_published: pageDetails.visibility === "public",
+        is_published: pageDetails.visibility !== "private",
         visibility: pageDetails.visibility as "private" | "public" | "unlisted",
       };
 
@@ -355,6 +355,7 @@ export default function Editor() {
         title: pageDetails.title,
         visibility: pageDetails.visibility,
       };
+      isDirtyRef.current = false;
 
       // Show success notification
       setShowSaveSuccess(true);
@@ -433,7 +434,7 @@ export default function Editor() {
         title: pageDetails.title,
         cover_url: pageDetails.coverUrl,
         content_md: md,
-        is_published: pageDetails.visibility === "public",
+        is_published: pageDetails.visibility !== "private",
         visibility: pageDetails.visibility as "private" | "public" | "unlisted",
       };
       await updateNoteMutation.mutateAsync({
@@ -446,6 +447,7 @@ export default function Editor() {
         title: pageDetails.title,
         visibility: pageDetails.visibility,
       };
+      isDirtyRef.current = false;
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
       setShowEditModal(false);
@@ -454,34 +456,11 @@ export default function Editor() {
     }
   };
 
-  const handlePageDetailsChange = async (field: string, value: string) => {
+  const handlePageDetailsChange = (field: string, value: string) => {
     setPageDetails((prev) => ({
       ...prev,
       [field]: value,
     }));
-
-    // If we're changing the title and have a current note, save it immediately
-    if (field === "title" && currentNoteId) {
-      try {
-        const updateData: UpdateNoteRequest = {
-          title: value,
-          content_md: md,
-          is_published: pageDetails.visibility === "public",
-          visibility: pageDetails.visibility as
-            | "private"
-            | "public"
-            | "unlisted",
-        };
-
-        await updateNoteMutation.mutateAsync({
-          id: currentNoteId,
-          data: updateData,
-        });
-        refetchNotes(); // Refresh the notes list to update sidebar
-      } catch (error) {
-        console.error("Failed to save title:", error);
-      }
-    }
   };
 
   return (

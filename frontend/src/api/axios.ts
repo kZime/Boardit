@@ -23,14 +23,8 @@ api.interceptors.request.use(authRequestInterceptor)
 // Also apply to global axios instance (used by orval-generated code)
 axios.interceptors.request.use(authRequestInterceptor)
 
-// ===== 401 refresh: skip auth path; no refresh_token; no hard redirect =====
-let isRefreshing = false
-let subscribers: Array<(token: string) => void> = []
-
-function onRefreshed(token: string) {
-  subscribers.forEach((cb) => cb(token))
-  subscribers = []
-}
+// ===== 401 refresh: skip auth path; share one refresh promise across callers =====
+let refreshPromise: Promise<string> | null = null
 
 interface RetryableConfig {
   url?: string
@@ -38,7 +32,35 @@ interface RetryableConfig {
   _retry?: boolean
 }
 
-const authResponseInterceptor = async (err: AxiosError) => {
+function refreshAccessToken(refreshToken: string): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(
+        '/api/auth/refresh',
+        { refresh_token: refreshToken },
+        { baseURL: api.defaults.baseURL },
+      )
+      .then(({ data }) => {
+        if (!data?.access_token) throw new Error('bad refresh response')
+        setAccessToken(data.access_token)
+        if (data.refresh_token) {
+          localStorage.setItem('refreshToken', data.refresh_token)
+        }
+        return data.access_token as string
+      })
+      .catch((error) => {
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        throw error
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
+export const authResponseInterceptor = async (err: AxiosError) => {
   const status = err?.response?.status
   const config: RetryableConfig = (err?.config as RetryableConfig) ?? {}
 
@@ -56,42 +78,21 @@ const authResponseInterceptor = async (err: AxiosError) => {
     return Promise.reject(err)
   }
 
-  if (!isRefreshing) {
-    isRefreshing = true
-    try {
-      const { data } = await axios.post(
-        '/api/auth/refresh',
-        { refresh_token: rt },
-        { baseURL: api.defaults.baseURL }
-      )
-      if (!data?.access_token) throw new Error('bad refresh response')
-
-      setAccessToken(data.access_token)
-      if (data.refresh_token) {
-        localStorage.setItem('refreshToken', data.refresh_token)
-      }
-      onRefreshed(data.access_token)
-    } catch (e) {
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
-      return Promise.reject(e)
-    } finally {
-      isRefreshing = false
-    }
+  let newToken: string
+  try {
+    newToken = await refreshAccessToken(rt)
+  } catch (error) {
+    return Promise.reject(error)
   }
 
-  // suspend current request, retry after refresh
-  return new Promise((resolve) => {
-    subscribers.push((newToken: string) => {
-      if (err.config) {
-        Object.assign(err.config.headers, { Authorization: `Bearer ${newToken}` })
-        ;(err.config as InternalAxiosRequestConfig & { _retry?: boolean })._retry = true
-        resolve(api(err.config))
-      } else {
-        resolve(Promise.reject(err))
-      }
-    })
-  })
+  if (!err.config) return Promise.reject(err)
+  Object.assign(err.config.headers, { Authorization: `Bearer ${newToken}` })
+  ;(err.config as InternalAxiosRequestConfig & { _retry?: boolean })._retry = true
+  return api(err.config)
+}
+
+export function resetAuthRefreshStateForTests() {
+  refreshPromise = null
 }
 
 api.interceptors.response.use((res) => res, authResponseInterceptor)

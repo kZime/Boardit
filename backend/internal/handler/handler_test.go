@@ -94,6 +94,56 @@ func (suite *AuthTestSuite) TestRegisterSuccess() {
 	suite.userID = uint(response["id"].(float64))
 }
 
+func (suite *AuthTestSuite) TestRegisterRejectsUnsafeUsernamesAndShortPasswords() {
+	testCases := []struct {
+		name     string
+		username string
+		password string
+	}{
+		{name: "whitespace username", username: "   ", password: "testpassword"},
+		{name: "URL-unsafe username", username: "bad/name", password: "testpassword"},
+		{name: "username too short", username: "ab", password: "testpassword"},
+		{name: "password too short", username: "valid-user", password: "1234567"},
+	}
+
+	for index, testCase := range testCases {
+		suite.Run(testCase.name, func() {
+			body, err := json.Marshal(registerRequest{
+				Username: testCase.username,
+				Email:    fmt.Sprintf("invalid-%d@example.com", index),
+				Password: testCase.password,
+			})
+			suite.NoError(err)
+			req, err := http.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBuffer(body))
+			suite.NoError(err)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			suite.router.ServeHTTP(w, req)
+
+			suite.Equal(http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func (suite *AuthTestSuite) TestRegisterRejectsDuplicateUsername() {
+	suite.registerTestUser()
+	body, err := json.Marshal(registerRequest{
+		Username: "testuser",
+		Email:    "another@example.com",
+		Password: "testpassword",
+	})
+	suite.NoError(err)
+	req, err := http.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBuffer(body))
+	suite.NoError(err)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	suite.router.ServeHTTP(w, req)
+
+	suite.Equal(http.StatusBadRequest, w.Code)
+}
+
 // TestLoginSuccess tests user login
 func (suite *AuthTestSuite) TestLoginSuccess() {
 	// First register a user
@@ -128,6 +178,7 @@ func (suite *AuthTestSuite) TestLoginSuccess() {
 
 	suite.NotEmpty(response["access_token"], "Expected access token to be present")
 	suite.NotEmpty(response["refresh_token"], "Expected refresh token to be present")
+	suite.Equal(float64(accessTokenTTL.Seconds()), response["expires_in"])
 
 	// Store tokens for other tests
 	suite.accessToken = response["access_token"].(string)
@@ -167,10 +218,27 @@ func (suite *AuthTestSuite) TestRefresh() {
 
 	suite.NotEmpty(refreshResponse["access_token"], "Expected new access token to be present")
 	suite.NotEmpty(refreshResponse["refresh_token"], "Expected new refresh token to be present")
+	suite.Equal(float64(accessTokenTTL.Seconds()), refreshResponse["expires_in"])
 
 	// Check the new tokens are different from the old ones
 	suite.NotEqual(suite.refreshToken, refreshResponse["refresh_token"], "Expected new refresh token")
 	suite.NotEqual(suite.accessToken, refreshResponse["access_token"], "Expected new access token")
+}
+
+func (suite *AuthTestSuite) TestRefreshRejectsAccessToken() {
+	suite.registerTestUser()
+	suite.loginTestUser()
+
+	body, err := json.Marshal(refreshRequest{RefreshToken: suite.accessToken})
+	suite.NoError(err)
+	req, err := http.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewBuffer(body))
+	suite.NoError(err)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	suite.router.ServeHTTP(w, req)
+
+	suite.Equal(http.StatusUnauthorized, w.Code)
 }
 
 // TestGetCurrentUserSuccess tests getting current user info

@@ -5,8 +5,10 @@ import (
 	"backend/internal/database"
 	"backend/internal/model"
 	"backend/internal/response"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -16,6 +18,33 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+type optionalUint struct {
+	Set   bool
+	Value *uint
+}
+
+func (value *optionalUint) UnmarshalJSON(data []byte) error {
+	value.Set = true
+	if string(data) == "null" {
+		value.Value = nil
+		return nil
+	}
+	var parsed uint
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	value.Value = &parsed
+	return nil
+}
+
+func formatTimestamp(value time.Time) string {
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func nowTimestamp() time.Time {
+	return time.Now().UTC().Truncate(time.Microsecond)
+}
 
 // stripFrontmatter removes the leading --- ... --- frontmatter block from markdown.
 // If no frontmatter is present the original string is returned unchanged.
@@ -65,6 +94,9 @@ func ListNotes(c *gin.Context) {
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
 		offset = 0 // default value
+	}
+	if offset < 0 {
+		offset = 0
 	}
 
 	// Validate limit
@@ -175,6 +207,7 @@ func CreateNote(c *gin.Context) {
 	// Convert markdown to HTML (basic implementation)
 	contentHtml := convertMarkdownToHTML(req.ContentMd)
 
+	now := nowTimestamp()
 	// Create note
 	note := model.Note{
 		UserID:      userID.(uint),
@@ -186,8 +219,8 @@ func CreateNote(c *gin.Context) {
 		IsPublished: false,
 		Visibility:  "private",
 		SortOrder:   0,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if err := database.DB.Create(&note).Error; err != nil {
@@ -206,8 +239,8 @@ func CreateNote(c *gin.Context) {
 		"is_published": note.IsPublished,
 		"visibility":   note.Visibility,
 		"sort_order":   note.SortOrder,
-		"created_at":   note.CreatedAt.Format(time.RFC3339),
-		"updated_at":   note.UpdatedAt.Format(time.RFC3339),
+		"created_at":   formatTimestamp(note.CreatedAt),
+		"updated_at":   formatTimestamp(note.UpdatedAt),
 	}
 
 	// Handle nullable folder_id
@@ -286,6 +319,9 @@ func convertMarkdownToHTML(markdown string) string {
 	// Basic markdown to HTML conversion
 	// In production, you should use a proper markdown parser like goldmark
 
+	// Escape raw HTML before adding the small supported Markdown subset.
+	markdown = html.EscapeString(markdown)
+
 	// Replace # with <h1>
 	reg := regexp.MustCompile(`^# (.+)$`)
 	html := reg.ReplaceAllString(markdown, "<h1>$1</h1>")
@@ -359,8 +395,8 @@ func GetNote(c *gin.Context) {
 		"is_published": note.IsPublished,
 		"visibility":   note.Visibility,
 		"sort_order":   note.SortOrder,
-		"created_at":   note.CreatedAt.Format(time.RFC3339),
-		"updated_at":   note.UpdatedAt.Format(time.RFC3339),
+		"created_at":   formatTimestamp(note.CreatedAt),
+		"updated_at":   formatTimestamp(note.UpdatedAt),
 	}
 
 	// Handle nullable folder_id
@@ -384,13 +420,13 @@ func GetNote(c *gin.Context) {
 // ------------------------------------------------------------
 
 type updateNoteRequest struct {
-	Title       *string `json:"title"`
-	FolderID    *uint   `json:"folder_id"`
-	CoverURL    *string `json:"cover_url"`
-	ContentMd   *string `json:"content_md"`
-	IsPublished *bool   `json:"is_published"`
-	Visibility  *string `json:"visibility"`
-	UpdatedAt   string  `json:"updated_at"`
+	Title       *string      `json:"title"`
+	FolderID    optionalUint `json:"folder_id"`
+	CoverURL    *string      `json:"cover_url"`
+	ContentMd   *string      `json:"content_md"`
+	IsPublished *bool        `json:"is_published"`
+	Visibility  *string      `json:"visibility"`
+	UpdatedAt   string       `json:"updated_at"`
 }
 
 func UpdateNote(c *gin.Context) {
@@ -442,7 +478,7 @@ func UpdateNote(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{
 				"error":             "VERSION_CONFLICT",
 				"message":           "note has been modified by another client",
-				"server_updated_at": note.UpdatedAt.Format(time.RFC3339),
+				"server_updated_at": formatTimestamp(note.UpdatedAt),
 				"server_snapshot": gin.H{
 					"id":           note.ID,
 					"user_id":      note.UserID,
@@ -454,8 +490,8 @@ func UpdateNote(c *gin.Context) {
 					"is_published": note.IsPublished,
 					"visibility":   note.Visibility,
 					"sort_order":   note.SortOrder,
-					"created_at":   note.CreatedAt.Format(time.RFC3339),
-					"updated_at":   note.UpdatedAt.Format(time.RFC3339),
+					"created_at":   formatTimestamp(note.CreatedAt),
+					"updated_at":   formatTimestamp(note.UpdatedAt),
 				},
 			})
 			return
@@ -471,8 +507,15 @@ func UpdateNote(c *gin.Context) {
 		hasChanges = true
 	}
 
-	if req.FolderID != nil {
-		note.FolderID = req.FolderID
+	if req.FolderID.Set {
+		if req.FolderID.Value != nil {
+			var folder model.Folder
+			if err := database.DB.Where("id = ? AND user_id = ?", *req.FolderID.Value, userID).First(&folder).Error; err != nil {
+				response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "folder not found or access denied")
+				return
+			}
+		}
+		note.FolderID = req.FolderID.Value
 		hasChanges = true
 	}
 
@@ -510,8 +553,8 @@ func UpdateNote(c *gin.Context) {
 			"is_published": note.IsPublished,
 			"visibility":   note.Visibility,
 			"sort_order":   note.SortOrder,
-			"created_at":   note.CreatedAt.Format(time.RFC3339),
-			"updated_at":   note.UpdatedAt.Format(time.RFC3339),
+			"created_at":   formatTimestamp(note.CreatedAt),
+			"updated_at":   formatTimestamp(note.UpdatedAt),
 		}
 
 		if note.FolderID != nil {
@@ -525,7 +568,7 @@ func UpdateNote(c *gin.Context) {
 	}
 
 	// Update timestamp
-	note.UpdatedAt = time.Now()
+	note.UpdatedAt = nowTimestamp()
 
 	// Save to database
 	if err := database.DB.Save(&note).Error; err != nil {
@@ -545,8 +588,8 @@ func UpdateNote(c *gin.Context) {
 		"is_published": note.IsPublished,
 		"visibility":   note.Visibility,
 		"sort_order":   note.SortOrder,
-		"created_at":   note.CreatedAt.Format(time.RFC3339),
-		"updated_at":   note.UpdatedAt.Format(time.RFC3339),
+		"created_at":   formatTimestamp(note.CreatedAt),
+		"updated_at":   formatTimestamp(note.UpdatedAt),
 	}
 
 	if note.FolderID != nil {
@@ -627,8 +670,8 @@ func ListFolders(c *gin.Context) {
 			"user_id":    f.UserID,
 			"name":       f.Name,
 			"sort_order": f.SortOrder,
-			"created_at": f.CreatedAt.Format(time.RFC3339),
-			"updated_at": f.UpdatedAt.Format(time.RFC3339),
+			"created_at": formatTimestamp(f.CreatedAt),
+			"updated_at": formatTimestamp(f.UpdatedAt),
 		}
 		if f.ParentID != nil {
 			entry["parent_id"] = *f.ParentID
@@ -665,16 +708,30 @@ func CreateFolder(c *gin.Context) {
 		return
 	}
 
+	request.Name = strings.TrimSpace(request.Name)
+	if request.Name == "" {
+		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "folder name is required")
+		return
+	}
+	if request.ParentID != nil {
+		var parent model.Folder
+		if err := database.DB.Where("id = ? AND user_id = ?", *request.ParentID, userID).First(&parent).Error; err != nil {
+			response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "parent folder not found or access denied")
+			return
+		}
+	}
+
 	// Name is required, no need for default value
 
+	now := nowTimestamp()
 	// Create folder
 	folder := model.Folder{
 		UserID:    userID.(uint),
 		Name:      request.Name,
 		ParentID:  request.ParentID,
 		SortOrder: 0,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	// Save to database
@@ -690,8 +747,8 @@ func CreateFolder(c *gin.Context) {
 		"name":       folder.Name,
 		"parent_id":  folder.ParentID,
 		"sort_order": folder.SortOrder,
-		"created_at": folder.CreatedAt.Format(time.RFC3339),
-		"updated_at": folder.UpdatedAt.Format(time.RFC3339),
+		"created_at": formatTimestamp(folder.CreatedAt),
+		"updated_at": formatTimestamp(folder.UpdatedAt),
 	}
 
 	c.JSON(http.StatusCreated, response)
@@ -706,8 +763,28 @@ func CreateFolder(c *gin.Context) {
 // ------------------------------------------------------------
 
 type updateFolderRequest struct {
-	Name     string `json:"name"`
-	ParentID *uint  `json:"parent_id"`
+	Name     string       `json:"name"`
+	ParentID optionalUint `json:"parent_id"`
+}
+
+func folderParentWouldCycle(db *gorm.DB, userID, folderID, parentID uint) (bool, error) {
+	visited := map[uint]struct{}{folderID: {}}
+	currentID := parentID
+	for {
+		if _, exists := visited[currentID]; exists {
+			return true, nil
+		}
+		visited[currentID] = struct{}{}
+
+		var current model.Folder
+		if err := db.Where("id = ? AND user_id = ?", currentID, userID).First(&current).Error; err != nil {
+			return false, err
+		}
+		if current.ParentID == nil {
+			return false, nil
+		}
+		currentID = *current.ParentID
+	}
 }
 
 func UpdateFolder(c *gin.Context) {
@@ -751,12 +828,32 @@ func UpdateFolder(c *gin.Context) {
 	hasChanges := false
 
 	if req.Name != "" {
-		folder.Name = req.Name
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "folder name is required")
+			return
+		}
+		folder.Name = name
 		hasChanges = true
 	}
 
-	if req.ParentID != nil {
-		folder.ParentID = req.ParentID
+	if req.ParentID.Set {
+		if req.ParentID.Value != nil {
+			wouldCycle, err := folderParentWouldCycle(database.DB, userID.(uint), folderID, *req.ParentID.Value)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "parent folder not found or access denied")
+				} else {
+					response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to validate parent folder")
+				}
+				return
+			}
+			if wouldCycle {
+				response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "folder parent would create a cycle")
+				return
+			}
+		}
+		folder.ParentID = req.ParentID.Value
 		hasChanges = true
 	}
 
@@ -767,8 +864,8 @@ func UpdateFolder(c *gin.Context) {
 			"user_id":    folder.UserID,
 			"name":       folder.Name,
 			"sort_order": folder.SortOrder,
-			"created_at": folder.CreatedAt.Format(time.RFC3339),
-			"updated_at": folder.UpdatedAt.Format(time.RFC3339),
+			"created_at": formatTimestamp(folder.CreatedAt),
+			"updated_at": formatTimestamp(folder.UpdatedAt),
 		}
 
 		if folder.ParentID != nil {
@@ -782,7 +879,7 @@ func UpdateFolder(c *gin.Context) {
 	}
 
 	// Update timestamp
-	folder.UpdatedAt = time.Now()
+	folder.UpdatedAt = nowTimestamp()
 
 	// Save to database
 	if err := database.DB.Save(&folder).Error; err != nil {
@@ -796,8 +893,8 @@ func UpdateFolder(c *gin.Context) {
 		"user_id":    folder.UserID,
 		"name":       folder.Name,
 		"sort_order": folder.SortOrder,
-		"created_at": folder.CreatedAt.Format(time.RFC3339),
-		"updated_at": folder.UpdatedAt.Format(time.RFC3339),
+		"created_at": formatTimestamp(folder.CreatedAt),
+		"updated_at": formatTimestamp(folder.UpdatedAt),
 	}
 
 	if folder.ParentID != nil {
@@ -846,10 +943,10 @@ func DeleteFolder(c *gin.Context) {
 
 	// Check if folder is empty (no subfolders or notes)
 	var subfolderCount int64
-	database.DB.Model(&model.Folder{}).Where("parent_id = ?", folderID).Count(&subfolderCount)
+	database.DB.Model(&model.Folder{}).Where("parent_id = ? AND user_id = ?", folderID, userID).Count(&subfolderCount)
 
 	var noteCount int64
-	database.DB.Model(&model.Note{}).Where("folder_id = ?", folderID).Count(&noteCount)
+	database.DB.Model(&model.Note{}).Where("folder_id = ? AND user_id = ?", folderID, userID).Count(&noteCount)
 
 	if subfolderCount > 0 || noteCount > 0 {
 		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "folder is not empty")
@@ -886,6 +983,16 @@ type reorderTreeRequest struct {
 	} `json:"notes"`
 }
 
+type treeMutationError struct {
+	status  int
+	code    string
+	message string
+}
+
+func (err *treeMutationError) Error() string {
+	return err.message
+}
+
 func ReorderTree(c *gin.Context) {
 	var req reorderTreeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -900,39 +1007,54 @@ func ReorderTree(c *gin.Context) {
 		return
 	}
 
-	// Update folders
-	for _, folder := range req.Folders {
-		var f model.Folder
-		if err := database.DB.Where("id = ? AND user_id = ?", folder.ID, userID).First(&f).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				response.Error(c, http.StatusNotFound, "NOT_FOUND", "folder not found")
-			} else {
-				response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to get folder")
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		for _, folder := range req.Folders {
+			var storedFolder model.Folder
+			if err := tx.Where("id = ? AND user_id = ?", folder.ID, userID).First(&storedFolder).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return &treeMutationError{status: http.StatusNotFound, code: "NOT_FOUND", message: "folder not found"}
+				}
+				return &treeMutationError{status: http.StatusInternalServerError, code: "INTERNAL", message: "Failed to get folder"}
 			}
-			return
+			storedFolder.SortOrder = folder.SortOrder
+			if err := tx.Save(&storedFolder).Error; err != nil {
+				return &treeMutationError{status: http.StatusInternalServerError, code: "INTERNAL", message: "Failed to update folder"}
+			}
 		}
-		f.SortOrder = folder.SortOrder
-		if err := database.DB.Save(&f).Error; err != nil {
-			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to update folder")
-			return
-		}
-	}
 
-	// Update notes
-	for _, note := range req.Notes {
-		var n model.Note
-		if err := database.DB.Where("id = ? AND user_id = ?", note.ID, userID).First(&n).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				response.Error(c, http.StatusNotFound, "NOT_FOUND", "note not found")
-				return
+		for _, note := range req.Notes {
+			var storedNote model.Note
+			if err := tx.Where("id = ? AND user_id = ?", note.ID, userID).First(&storedNote).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return &treeMutationError{status: http.StatusNotFound, code: "NOT_FOUND", message: "note not found"}
+				}
+				return &treeMutationError{status: http.StatusInternalServerError, code: "INTERNAL", message: "Failed to get note"}
+			}
+			if note.FolderID != nil {
+				var folder model.Folder
+				if err := tx.Where("id = ? AND user_id = ?", *note.FolderID, userID).First(&folder).Error; err != nil {
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						return &treeMutationError{status: http.StatusBadRequest, code: "VALIDATION_ERROR", message: "folder not found or access denied"}
+					}
+					return &treeMutationError{status: http.StatusInternalServerError, code: "INTERNAL", message: "Failed to validate folder"}
+				}
+			}
+			storedNote.SortOrder = note.SortOrder
+			storedNote.FolderID = note.FolderID
+			if err := tx.Save(&storedNote).Error; err != nil {
+				return &treeMutationError{status: http.StatusInternalServerError, code: "INTERNAL", message: "Failed to update note"}
 			}
 		}
-		n.SortOrder = note.SortOrder
-		n.FolderID = note.FolderID
-		if err := database.DB.Save(&n).Error; err != nil {
-			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to update note")
-			return
+		return nil
+	})
+	if err != nil {
+		var mutationErr *treeMutationError
+		if errors.As(err, &mutationErr) {
+			response.Error(c, mutationErr.status, mutationErr.code, mutationErr.message)
+		} else {
+			response.Error(c, http.StatusInternalServerError, "INTERNAL", "Failed to reorder tree")
 		}
+		return
 	}
 
 	// Return success
@@ -1011,8 +1133,8 @@ func ListPublicNotes(c *gin.Context) {
 			"author_username": usernameByID[n.UserID],
 			"excerpt":         excerpt,
 			"cover_url":       n.CoverURL,
-			"created_at":      n.CreatedAt.Format(time.RFC3339),
-			"updated_at":      n.UpdatedAt.Format(time.RFC3339),
+			"created_at":      formatTimestamp(n.CreatedAt),
+			"updated_at":      formatTimestamp(n.UpdatedAt),
 		})
 	}
 
@@ -1068,8 +1190,8 @@ func GetPublicNote(c *gin.Context) {
 		"content_html":    note.ContentHtml,
 		"is_published":    note.IsPublished,
 		"visibility":      note.Visibility,
-		"created_at":      note.CreatedAt.Format(time.RFC3339),
-		"updated_at":      note.UpdatedAt.Format(time.RFC3339),
+		"created_at":      formatTimestamp(note.CreatedAt),
+		"updated_at":      formatTimestamp(note.UpdatedAt),
 		"author_username": user.Username,
 	}
 	if note.FolderID != nil {

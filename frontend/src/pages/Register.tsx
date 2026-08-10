@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$/;
 const MIN_PASSWORD_LENGTH = 8;
 
 export default function Register() {
@@ -22,6 +23,10 @@ export default function Register() {
     const trimmedPassword = password.trim();
     if (!trimmedUsername) {
       setErr('Username is required');
+      return;
+    }
+    if (!USERNAME_RE.test(trimmedUsername)) {
+      setErr('Username must be 3-32 letters, numbers, underscores, or hyphens');
       return;
     }
     if (!trimmedEmail) {

@@ -31,8 +31,24 @@ test('an author can edit and publish a note', async ({ page }) => {
   await page.getByRole('button', { name: 'Save Changes' }).click()
   await expect(page.getByText('Saved successfully!')).toBeVisible()
 
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('link', { name: 'Boardit' }).click()
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('heading', { name: 'Published by smoke test' })).toBeVisible()
+})
+
+test('unlisted notes are published for direct-link access', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'DEV: Skip Login (Mock Mode)' }).click()
+  await page.getByRole('button', { name: 'Welcome to Boardit', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit Details' }).click()
+  await page.getByLabel('Visibility').selectOption('unlisted')
+
+  const updateRequest = page.waitForRequest(
+    (request) => request.method() === 'PATCH' && /\/api\/v1\/notes\/\d+$/.test(request.url()),
+  )
+  await page.getByRole('button', { name: 'Save Changes' }).click()
+  expect((await updateRequest).postDataJSON()).toMatchObject({
+    is_published: true,
+    visibility: 'unlisted',
+  })
 })

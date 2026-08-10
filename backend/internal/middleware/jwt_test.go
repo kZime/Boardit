@@ -48,6 +48,7 @@ func (suite *JWTMiddlewareTestSuite) TestValidToken() {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": float64(123),
 		"exp": time.Now().Add(time.Hour).Unix(),
+		"typ": "access",
 	})
 	tokenString, err := token.SignedString([]byte(suite.secret))
 	suite.NoError(err)
@@ -195,6 +196,7 @@ func (suite *JWTMiddlewareTestSuite) TestMissingSubClaim() {
 	// Create a token without sub claim
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"exp": time.Now().Add(time.Hour).Unix(),
+		"typ": "access",
 		// Missing "sub" claim
 	})
 	tokenString, err := token.SignedString([]byte(suite.secret))
@@ -221,6 +223,7 @@ func (suite *JWTMiddlewareTestSuite) TestInvalidSubClaimType() {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": "123", // String instead of number
 		"exp": time.Now().Add(time.Hour).Unix(),
+		"typ": "access",
 	})
 	tokenString, err := token.SignedString([]byte(suite.secret))
 	suite.NoError(err)
@@ -239,6 +242,27 @@ func (suite *JWTMiddlewareTestSuite) TestInvalidSubClaimType() {
 	err = suite.parseJSON(w.Body.Bytes(), &response)
 	suite.NoError(err)
 	suite.Equal("invalid sub claim", response["error"])
+}
+
+func (suite *JWTMiddlewareTestSuite) TestRejectsRefreshToken() {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": float64(123),
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"typ": "refresh",
+	})
+	tokenString, err := token.SignedString([]byte(suite.secret))
+	suite.NoError(err)
+
+	req, err := http.NewRequest("GET", "/test", nil)
+	suite.NoError(err)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+	suite.router.ServeHTTP(w, req)
+
+	suite.Equal(http.StatusUnauthorized, w.Code)
+	var response map[string]interface{}
+	suite.NoError(suite.parseJSON(w.Body.Bytes(), &response))
+	suite.Equal("invalid token type", response["error"])
 }
 
 // Helper method to parse JSON response

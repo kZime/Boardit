@@ -49,6 +49,11 @@ func JWTMiddleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
 			return
 		}
+		tokenType, ok := claims["typ"].(string)
+		if !ok || tokenType != "access" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token type"})
+			return
+		}
 		sub, ok := claims["sub"].(float64) // jwt library will parse number to float64
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid sub claim"})

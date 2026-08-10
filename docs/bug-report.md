@@ -4,6 +4,24 @@
 > 排查范围：backend (Go + Gin + GORM) 与 frontend (React + Vite + TS)
 > 说明：#3/#11 为当前未被前端触发的隐患；其余均为可复现的实际问题。
 
+## 维护状态（2026-08-10）
+
+| # | 状态 | 回归保护 |
+|---|---|---|
+| 1 | ✅ R1 已修复 | 重排失败整体回滚，DB 错误不再继续保存零值 model |
+| 2 | ✅ R1 已修复 | note/folder 外键强制用户作用域，覆盖自环、后代环和跨用户关联 |
+| 3 | ✅ R1 已修复 | 时间版本使用微秒存储精度与 RFC3339Nano 响应，覆盖成功往返和过期冲突 |
+| 4 | ✅ R1 已修复 | 并发 401 共享单个 refresh Promise，成功全部重试，失败全部 reject |
+| 5 | ✅ R1 已修复 | Playwright 验证 unlisted 保存发送 `is_published: true` |
+| 6 | ✅ R1 已修复 | 取消标题逐键 PATCH，显式保存后立即清理 dirty state |
+| 7 | 🟡 计划在 R3 修复 | 与 Editor session/query 拆分一起引入完整分页 |
+| 8 | ✅ R1 已修复 | 负 offset 统一钳制为 0 |
+| 9 | ✅ R1 已修复 | 前后端统一为 3–32 位 URL-safe 用户名 |
+| 10 | ✅ R1 已修复 | 前后端统一为 8 位最小密码，后端限制 bcrypt 72 字节上限 |
+| 11 | ✅ R1 已修复 | 存储 HTML 前先转义原始 HTML，回归测试覆盖 script 标签 |
+
+依赖审计已从 52 个告警降至 4 个；剩余 1 个 high 来自 MDXEditor 3.x 的 `js-yaml`，3 个 moderate 来自 React Router 6.x。两者均需要主版本升级，已放入 R3 并要求通过编辑器与路由 E2E 后才提交；CI 当前对生产依赖的 critical 告警失败。
+
 ## 🔴 高严重度
 
 ### 1. `ReorderTree` 笔记循环吞掉 DB 错误 → 静默插入脏数据

@@ -51,6 +51,9 @@ func (suite *NoteHandlerTestSuite) SetupSuite() {
 	suite.router.DELETE("/api/v1/notes/:id", DeleteNote)
 	suite.router.GET("/api/v1/folders", ListFolders)
 	suite.router.POST("/api/v1/folders", CreateFolder)
+	suite.router.PATCH("/api/v1/folders/:id", UpdateFolder)
+	suite.router.DELETE("/api/v1/folders/:id", DeleteFolder)
+	suite.router.POST("/api/v1/tree/reorder", ReorderTree)
 	suite.router.GET("/api/v1/public/notes", ListPublicNotes)
 	suite.router.GET("/api/v1/public/notes/:username/:slug", GetPublicNote)
 }
@@ -144,6 +147,122 @@ func (suite *NoteHandlerTestSuite) TestPrivateResourcesAreIsolatedByUser() {
 	suite.Equal(http.StatusNotFound, suite.request(http.MethodGet, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user2.ID, nil).Code)
 	otherUserList := suite.decodeObject(suite.request(http.MethodGet, "/api/v1/notes", suite.user2.ID, nil))
 	suite.Equal(float64(0), otherUserList["total"])
+}
+
+func (suite *NoteHandlerTestSuite) TestListNotesClampsNegativeOffset() {
+	response := suite.request(http.MethodGet, "/api/v1/notes?offset=-10", suite.user1.ID, nil)
+
+	suite.Equal(http.StatusOK, response.Code)
+	suite.Equal(float64(0), suite.decodeObject(response)["offset"])
+}
+
+func (suite *NoteHandlerTestSuite) TestMarkdownConversionEscapesRawHTML() {
+	converted := convertMarkdownToHTML(`<script>alert("xss")</script> **safe**`)
+
+	suite.NotContains(converted, "<script>")
+	suite.Contains(converted, "&lt;script&gt;")
+	suite.Contains(converted, "<strong>safe</strong>")
+}
+
+func (suite *NoteHandlerTestSuite) TestUpdatedAtCanBeRoundTrippedForOptimisticConcurrency() {
+	createResponse := suite.request(http.MethodPost, "/api/v1/notes", suite.user1.ID, map[string]any{
+		"title": "Concurrent", "content_md": "v1",
+	})
+	suite.Equal(http.StatusCreated, createResponse.Code)
+	created := suite.decodeObject(createResponse)
+	noteID := uint(created["id"].(float64))
+	version := created["updated_at"].(string)
+
+	updateResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
+		"content_md": "v2", "updated_at": version,
+	})
+	suite.Equal(http.StatusOK, updateResponse.Code)
+	suite.NotEqual(version, suite.decodeObject(updateResponse)["updated_at"])
+
+	conflictResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
+		"content_md": "stale write", "updated_at": version,
+	})
+	suite.Equal(http.StatusConflict, conflictResponse.Code)
+}
+
+func (suite *NoteHandlerTestSuite) TestFolderAssignmentsRequireOwnershipAndAllowMovingToRoot() {
+	now := time.Now()
+	ownFolder := model.Folder{UserID: suite.user1.ID, Name: "Mine", CreatedAt: now, UpdatedAt: now}
+	foreignFolder := model.Folder{UserID: suite.user2.ID, Name: "Theirs", CreatedAt: now, UpdatedAt: now}
+	suite.Require().NoError(database.DB.Create(&ownFolder).Error)
+	suite.Require().NoError(database.DB.Create(&foreignFolder).Error)
+
+	createResponse := suite.request(http.MethodPost, "/api/v1/notes", suite.user1.ID, map[string]any{
+		"title": "Move me", "folder_id": ownFolder.ID,
+	})
+	suite.Equal(http.StatusCreated, createResponse.Code)
+	noteID := uint(suite.decodeObject(createResponse)["id"].(float64))
+
+	foreignResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
+		"folder_id": foreignFolder.ID,
+	})
+	suite.Equal(http.StatusBadRequest, foreignResponse.Code)
+
+	rootResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
+		"folder_id": nil,
+	})
+	suite.Equal(http.StatusOK, rootResponse.Code)
+	var note model.Note
+	suite.Require().NoError(database.DB.First(&note, noteID).Error)
+	suite.Nil(note.FolderID)
+}
+
+func (suite *NoteHandlerTestSuite) TestFolderParentsRequireOwnershipAndCannotFormCycles() {
+	now := time.Now()
+	parent := model.Folder{UserID: suite.user1.ID, Name: "Parent", CreatedAt: now, UpdatedAt: now}
+	suite.Require().NoError(database.DB.Create(&parent).Error)
+	child := model.Folder{UserID: suite.user1.ID, Name: "Child", ParentID: &parent.ID, CreatedAt: now, UpdatedAt: now}
+	suite.Require().NoError(database.DB.Create(&child).Error)
+	foreign := model.Folder{UserID: suite.user2.ID, Name: "Foreign", CreatedAt: now, UpdatedAt: now}
+	suite.Require().NoError(database.DB.Create(&foreign).Error)
+
+	createResponse := suite.request(http.MethodPost, "/api/v1/folders", suite.user1.ID, map[string]any{
+		"name": "Invalid", "parent_id": foreign.ID,
+	})
+	suite.Equal(http.StatusBadRequest, createResponse.Code)
+
+	for name, parentID := range map[string]uint{
+		"self":       parent.ID,
+		"descendant": child.ID,
+		"foreign":    foreign.ID,
+	} {
+		suite.Run(name, func() {
+			response := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/folders/%d", parent.ID), suite.user1.ID, map[string]any{
+				"parent_id": parentID,
+			})
+			suite.Equal(http.StatusBadRequest, response.Code)
+		})
+	}
+}
+
+func (suite *NoteHandlerTestSuite) TestReorderIsAtomicAndRejectsForeignFolders() {
+	now := time.Now()
+	folder := model.Folder{UserID: suite.user1.ID, Name: "Mine", CreatedAt: now, UpdatedAt: now}
+	foreign := model.Folder{UserID: suite.user2.ID, Name: "Foreign", CreatedAt: now, UpdatedAt: now}
+	suite.Require().NoError(database.DB.Create(&folder).Error)
+	suite.Require().NoError(database.DB.Create(&foreign).Error)
+	note := model.Note{UserID: suite.user1.ID, Title: "Note", Slug: "note", ContentMd: "text", ContentHtml: "text", Visibility: "private", CreatedAt: now, UpdatedAt: now}
+	suite.Require().NoError(database.DB.Create(&note).Error)
+
+	atomicResponse := suite.request(http.MethodPost, "/api/v1/tree/reorder", suite.user1.ID, map[string]any{
+		"folders": []map[string]any{{"id": folder.ID, "sort_order": 7}},
+		"notes":   []map[string]any{{"id": 999999, "sort_order": 1, "folder_id": folder.ID}},
+	})
+	suite.Equal(http.StatusNotFound, atomicResponse.Code)
+	suite.Require().NoError(database.DB.First(&folder, folder.ID).Error)
+	suite.Equal(0, folder.SortOrder)
+
+	foreignResponse := suite.request(http.MethodPost, "/api/v1/tree/reorder", suite.user1.ID, map[string]any{
+		"notes": []map[string]any{{"id": note.ID, "sort_order": 1, "folder_id": foreign.ID}},
+	})
+	suite.Equal(http.StatusBadRequest, foreignResponse.Code)
+	suite.Require().NoError(database.DB.First(&note, note.ID).Error)
+	suite.Nil(note.FolderID)
 }
 
 func (suite *NoteHandlerTestSuite) TestPublicListingAndPermalinks() {
