@@ -13,6 +13,10 @@ import (
 // JWTMiddleware: validate Authorization: Bearer <token>
 // if success, set userID in context, otherwise return 401
 func JWTMiddleware() gin.HandlerFunc {
+	return JWTMiddlewareWithSecret(os.Getenv("JWT_SECRET"))
+}
+
+func JWTMiddlewareWithSecret(secretValue string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -30,7 +34,7 @@ func JWTMiddleware() gin.HandlerFunc {
 		tokenString := parts[1]
 
 		// Parse and verify signature
-		secret := []byte(os.Getenv("JWT_SECRET"))
+		secret := []byte(secretValue)
 		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 			// Strongly validate signature algorithm
 			if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {

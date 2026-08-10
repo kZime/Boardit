@@ -5,9 +5,23 @@
 | Method | Endpoint             | Description                                                                   |
 | ------ | -------------------- | ----------------------------------------------------------------------------- |
 | POST   | `/api/auth/register` | `{ username, email, password }`, return new user info (without password) |
-| POST   | `/api/auth/login`    | `{ email, password }`, return `{ access_token, refresh_token }`    |
-| POST   | `/api/auth/refresh`  | `{ refresh_token }`, return new `{ access_token, refresh_token }` |
+| POST   | `/api/auth/login`    | `{ email, password }`, return `{ access_token, refresh_token, expires_in }`    |
+| POST   | `/api/auth/refresh`  | `{ refresh_token }`, return new `{ access_token, refresh_token, expires_in }` |
 | GET    | `/api/user`          | get current user info (need to carry `Authorization: Bearer <access_token>` in Header) |
+
+## Architecture
+
+The note domain is a modular monolith with one-way dependencies:
+
+```text
+Gin router -> HTTP adapters -> noteapp.Service -> Repository -> GORM/PostgreSQL
+```
+
+- `internal/handler/*_http.go` parses HTTP input and maps application errors to the v1 contract.
+- `internal/noteapp/service.go` owns note, folder, publishing, authorization and transaction rules.
+- `internal/noteapp/repository.go` is the persistence boundary; GORM models never appear in public use-case inputs or outputs.
+- `internal/config` validates runtime settings before database or router initialization.
+- Future AI commands must call `noteapp.Service`; they must not write GORM models directly.
 
 ## Testing
 
@@ -20,6 +34,10 @@ backend/
 ├── internal/
 │   ├── handler/
 │   │   ├── handler_test.go      # Auth handler tests (test suite)
+│   │   ├── note_test.go         # HTTP contract/characterization tests
+│   │   └── ...
+│   ├── noteapp/
+│   │   ├── service_test.go      # Use-case tests without Gin
 │   │   └── ...
 │   ├── middleware/
 │   │   ├── jwt_test.go          # JWT middleware tests (test suite)
@@ -91,6 +109,7 @@ go test -v ./...
 
 # Run tests for specific package
 go test -v ./internal/handler
+go test -v ./internal/noteapp
 go test -v ./internal/middleware
 go test -v ./internal/router
 go test -v ./internal/database

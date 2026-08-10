@@ -27,8 +27,10 @@ Boardit/
 │   ├── docs/api/             # OpenAPI spec (api-contract-v1.yaml)
 │   └── internal/
 │       ├── handler/          # HTTP handlers
-│       ├── middleware/        # JWT middleware
-│       ├── model/            # GORM models
+│       ├── config/           # Validated runtime configuration
+│       ├── middleware/       # JWT middleware
+│       ├── model/            # Persistence-only GORM models
+│       ├── noteapp/          # Note/folder use cases, DTOs, repository boundary
 │       └── router/           # Route definitions
 └── frontend/                 # React frontend (Vite)
     ├── src/
@@ -42,8 +44,8 @@ Boardit/
 ## Prerequisites
 
 - Go 1.24+
-- Node.js 18+
-- PostgreSQL 14+
+- Node.js 22 (see `frontend/.nvmrc`)
+- PostgreSQL 15+
 
 ## Local Development
 
@@ -86,7 +88,7 @@ go run main.go             # starts on :8080
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev                # http://localhost:5173 (hot-reload)
 ```
 

@@ -224,6 +224,8 @@ backend/
 
 ### R2：后端模块化（3–5 天）
 
+**执行状态**：✅ 2026-08-10 已完成
+
 - 抽出 notes 用例、repository 和 DTO mapping。
 - 拆分 notes、folders、publishing 和 tree HTTP handler。
 - 集中 slug、Markdown、权限与事务规则。
@@ -272,10 +274,10 @@ backend/
 ### 模块边界
 
 - [ ] Editor 页面不再直接协调所有笔记树、保存、元信息和弹窗行为。
-- [ ] HTTP handler 不直接承载核心权限、事务和保存规则。
+- [x] HTTP handler 不直接承载核心权限、事务和保存规则。
 - [ ] AuthContext 与 Axios 不存在循环依赖。
 - [ ] 公开和私有页面使用统一的 API 类型、错误与缓存策略。
-- [ ] 新的 AI 模块只能通过笔记 use-case 修改内容，不能直接访问 GORM model。
+- [x] 新的 AI 模块只能通过笔记 use-case 修改内容，不能直接访问 GORM model。
 
 ### 数据与安全
 
@@ -287,7 +289,7 @@ backend/
 ### AI 就绪
 
 - [ ] 笔记更新能够可靠产生 revision 或变更事件。
-- [ ] 可以在不依赖 HTTP/Gin 的情况下测试笔记更新与发布用例。
+- [x] 可以在不依赖 HTTP/Gin 的情况下测试笔记更新与发布用例。
 - [ ] 后续索引任务能够通过 note ID、version 和 user ID 判断数据是否仍有效。
 - [ ] AI 候选内容可以在确认前独立存在，不覆盖当前正文。
 
@@ -305,6 +307,7 @@ backend/
 | 版本 | 日期 | 修改内容 | 修改人 |
 |---|---|---|---|
 | v1.0 | 2026-08-10 | 完成 AI 化前模块边界、耦合、风险和重构顺序评估 | AI |
+| v1.1 | 2026-08-10 | 完成 R0–R2：测试保护网、数据/认证不变式与后端模块化 | AI |
 
 ---
 

@@ -12,6 +12,7 @@ import (
 
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/noteapp"
 	"backend/internal/testutils"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,7 @@ func (suite *NoteHandlerTestSuite) SetupSuite() {
 
 	gin.SetMode(gin.TestMode)
 	suite.router = gin.New()
+	content := NewContentHandler(noteapp.NewService(noteapp.NewGormRepository(database.DB)))
 	suite.router.Use(func(c *gin.Context) {
 		if rawID := c.GetHeader("X-Test-User-ID"); rawID != "" {
 			id, err := strconv.ParseUint(rawID, 10, 64)
@@ -44,18 +46,18 @@ func (suite *NoteHandlerTestSuite) SetupSuite() {
 		}
 		c.Next()
 	})
-	suite.router.GET("/api/v1/notes", ListNotes)
-	suite.router.POST("/api/v1/notes", CreateNote)
-	suite.router.GET("/api/v1/notes/:id", GetNote)
-	suite.router.PATCH("/api/v1/notes/:id", UpdateNote)
-	suite.router.DELETE("/api/v1/notes/:id", DeleteNote)
-	suite.router.GET("/api/v1/folders", ListFolders)
-	suite.router.POST("/api/v1/folders", CreateFolder)
-	suite.router.PATCH("/api/v1/folders/:id", UpdateFolder)
-	suite.router.DELETE("/api/v1/folders/:id", DeleteFolder)
-	suite.router.POST("/api/v1/tree/reorder", ReorderTree)
-	suite.router.GET("/api/v1/public/notes", ListPublicNotes)
-	suite.router.GET("/api/v1/public/notes/:username/:slug", GetPublicNote)
+	suite.router.GET("/api/v1/notes", content.ListNotes)
+	suite.router.POST("/api/v1/notes", content.CreateNote)
+	suite.router.GET("/api/v1/notes/:id", content.GetNote)
+	suite.router.PATCH("/api/v1/notes/:id", content.UpdateNote)
+	suite.router.DELETE("/api/v1/notes/:id", content.DeleteNote)
+	suite.router.GET("/api/v1/folders", content.ListFolders)
+	suite.router.POST("/api/v1/folders", content.CreateFolder)
+	suite.router.PATCH("/api/v1/folders/:id", content.UpdateFolder)
+	suite.router.DELETE("/api/v1/folders/:id", content.DeleteFolder)
+	suite.router.POST("/api/v1/tree/reorder", content.ReorderTree)
+	suite.router.GET("/api/v1/public/notes", content.ListPublicNotes)
+	suite.router.GET("/api/v1/public/notes/:username/:slug", content.GetPublicNote)
 }
 
 func (suite *NoteHandlerTestSuite) SetupTest() {
@@ -154,14 +156,6 @@ func (suite *NoteHandlerTestSuite) TestListNotesClampsNegativeOffset() {
 
 	suite.Equal(http.StatusOK, response.Code)
 	suite.Equal(float64(0), suite.decodeObject(response)["offset"])
-}
-
-func (suite *NoteHandlerTestSuite) TestMarkdownConversionEscapesRawHTML() {
-	converted := convertMarkdownToHTML(`<script>alert("xss")</script> **safe**`)
-
-	suite.NotContains(converted, "<script>")
-	suite.Contains(converted, "&lt;script&gt;")
-	suite.Contains(converted, "<strong>safe</strong>")
 }
 
 func (suite *NoteHandlerTestSuite) TestUpdatedAtCanBeRoundTrippedForOptimisticConcurrency() {

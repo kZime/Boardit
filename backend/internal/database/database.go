@@ -18,7 +18,10 @@ var DB *gorm.DB
 // If DATABASE_DSN is ":memory:" or contains "sqlite", SQLite is used (no setup needed for tests).
 // Otherwise PostgreSQL is used (e.g. production or CI).
 func Init() error {
-	dsn := os.Getenv("DATABASE_DSN")
+	return InitWithDSN(os.Getenv("DATABASE_DSN"))
+}
+
+func InitWithDSN(dsn string) error {
 	if dsn == "" {
 		return fmt.Errorf("DATABASE_DSN is not set")
 	}
@@ -60,8 +63,7 @@ func TruncateAllTables() error {
 	if DB == nil {
 		return nil
 	}
-	dsn := os.Getenv("DATABASE_DSN")
-	if dsn == ":memory:" || strings.Contains(dsn, "sqlite") {
+	if DB.Dialector.Name() == "sqlite" {
 		// SQLite: delete in dependency order
 		for _, table := range []string{"note_revisions", "notes", "folders", "users"} {
 			if err := DB.Exec("DELETE FROM " + table).Error; err != nil {
