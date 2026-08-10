@@ -1,10 +1,10 @@
-# Boardit 分阶段维护运行手册
+# Boardit 维护运行手册
 
 **状态**：生效
 
-**适用范围**：`refactoring-readiness-assessment.md` 中的 R0–R4
+**适用范围**：R0–R4 完成后的日常维护、功能开发和 AI 迭代
 
-**基本原则**：保留现有技术栈和公开行为，小步修改，每阶段单独验证、单独本地提交。
+**基本原则**：小步修改、测试先行、保持模块边界、独立提交。架构与数据约束以根目录 [AGENTS.md](../AGENTS.md) 和 [architecture.md](architecture.md) 为准。
 
 ## 1. 自主执行边界
 
@@ -23,43 +23,15 @@
 - 需要产品决策，例如已发布 slug 是否固定、tags 是否保留、refresh token 是否迁移到 Cookie。
 - 无法在保留公开 API 或用户可见行为的前提下继续。
 
-## 2. 阶段提交协议
+## 2. 提交协议
 
-| 阶段 | 内容 | 提交前最低证据 | 建议 commit |
-|---|---|---|---|
-| R0 | 测试保护网、可重复依赖、PR CI | 全部基线门禁 | `test: establish refactoring safety net` |
-| R1 | 权限、并发、认证和交互 bug | 每个 bug 的回归测试 + 全部门禁 | `fix: enforce data and auth invariants` |
-| R2 | 后端分层与事务边界 | use-case 无 Gin 测试 + 契约不变 | `refactor: modularize note backend` |
-| R3 | 前端 Editor、Auth 和 API 解耦 | 组件/hook 测试 + E2E | `refactor: modularize editor frontend` |
-| R4 | 版本化迁移、revision/outbox 边界 | 向前迁移、回滚说明、版本测试 | `refactor: add versioned persistence boundaries` |
+每个提交只表达一个可独立验证的意图。行为修复附回归测试；契约变更附生成客户端；数据结构变更附双方言迁移和回滚说明；AI 功能附 eval 和失败体验。
 
-不将两个阶段压入同一 commit。某一阶段门禁未通过时，不创建该阶段 commit，也不继续下一阶段。
+门禁未通过时不提交。不要把格式化、无关依赖升级或用户的既有改动混入功能提交。
 
 ## 3. 本地完整门禁
 
-### 后端
-
-```bash
-cd backend
-test -z "$(gofmt -l .)"
-go vet ./...
-go test ./...
-```
-
-### 前端
-
-```bash
-cd frontend
-npm ci
-npm run lint
-npm test
-npm run build
-npm run orval
-git diff --exit-code -- src/api/gen
-npm run test:e2e
-```
-
-`npm ci` 为确定性安装标准；`package-lock.json` 是唯一锁文件。不使用会更改锁文件的安装方式代替 CI 门禁。
+完整命令和按变更类型选择测试的规则见 [`testing-strategy.md`](testing-strategy.md)。`npm ci` 是确定性安装标准，`package-lock.json` 是唯一前端锁文件。
 
 ## 4. 提交前检查
 
@@ -72,6 +44,6 @@ npm run test:e2e
 ## 5. 失败处理
 
 - 可重试的网络或包下载失败：保持代码不变，重试相同命令。
-- 新回归测试揭示现存 bug：将它与“希望行为”测试一起放入 R1，R0 仅固化可依赖的当前行为。
+- 新回归测试揭示现存 bug：记录最小复现，先确认期望行为，再让修复与测试进入同一提交。
 - 公开契约漂移：先停止，判断是生成文件过期还是 API 无意变更。
 - 门禁在当前阶段内无法修复：不提交，在交接中记录最小复现、根因和所需决策。
