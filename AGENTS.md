@@ -31,7 +31,7 @@ Gin/router -> HTTP handler -> noteapp use-case -> repository interface -> GORM a
 - Private resources and searches are scoped by `user_id`; inaccessible resources are reported as not found.
 - AI output remains an `ai_candidate` until explicit acceptance. Candidate generation never overwrites `notes.content_md`.
 - Workers must validate `(note_id, user_id, version)` and use deduplication keys.
-- Refresh tokens are single-use server-side sessions. Rotation revokes the old session; logout revokes the current session.
+- Refresh tokens are single-use server-side sessions. Rotation revokes the old session; reuse of a rotated token revokes every active session in its family; logout revokes the current session.
 
 ## Frontend boundaries
 

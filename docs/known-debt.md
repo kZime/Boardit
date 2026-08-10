@@ -8,7 +8,7 @@ This list contains intentional gaps after R0-R4. It prevents unfinished work fro
 |---|---|---|
 | Refresh token remains in localStorage | XSS can expose a long-lived credential | Decide and implement Secure, HttpOnly, SameSite cookie flow with CSRF protection |
 | No AI runtime or eval gate | AI tables are only boundaries, not a product feature | First AI operation ships with candidate review, cancellation, representative evals, and CI threshold |
-| No worker/outbox consumer | Note events are durable but not processed | Idempotent worker claims events/jobs and validates note user/version |
+| No worker/outbox consumer | Pending outbox rows are transactionally durable, but no delivery or processing guarantee exists yet | Idempotent worker claims events/jobs, records retry/dead-letter outcomes, and validates note user/version |
 | No AI observability | Cost, latency, quality, and failures cannot be demonstrated | Persist run metrics and expose P95/error/cost/eval reporting |
 
 ## Product decisions

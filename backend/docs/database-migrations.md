@@ -33,7 +33,7 @@ The API also applies pending migrations before opening the HTTP listener.
 4. Prefer a new forward migration for corrections.
 5. Use `-direction down` only when the matching application version is ready and the down file has been reviewed.
 
-Rolling back `000002` removes refresh sessions, async/AI foundation tables and revision metadata columns. Rolling back `000001` drops all application tables and is destructive. Never run either rollback against production without a verified backup and an approved recovery plan.
+Rolling back `000003` removes refresh-session family tracking and its replay containment. Rolling back `000002` removes refresh sessions, async/AI foundation tables and revision metadata columns. Rolling back `000001` drops all application tables and is destructive. Never run these rollbacks against production without a verified backup and an approved recovery plan.
 
 ## Tests
 

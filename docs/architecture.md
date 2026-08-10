@@ -74,7 +74,7 @@ Tree moves also advance the note version and record a revision/event. Deletion l
 
 - Login creates a short-lived access token and a persisted refresh session.
 - Refresh tokens have an explicit token type and random `jti`.
-- Refresh atomically revokes the old session and creates a replacement; replay returns 401.
+- Refresh atomically revokes the old session and creates a replacement in the same session family. Reuse of a rotated token revokes every active session in that family and returns 401.
 - Logout revokes the supplied refresh session and immediately clears local browser tokens.
 - Access-token refresh requests share one frontend promise so concurrent 401 responses settle together.
 
@@ -82,7 +82,7 @@ Refresh tokens are currently stored in localStorage. Migration to an HttpOnly co
 
 ## Asynchronous and AI foundation
 
-- `outbox_events` is the durable handoff from note transactions.
+- `outbox_events` stores transactionally durable pending records from note transactions; it does not provide delivery until a worker exists.
 - `background_jobs` defines provider-neutral claiming, retry, and deduplication state.
 - `ai_runs` records model/prompt/status/cost metadata boundaries.
 - `ai_candidates` stores proposed Markdown against a base note version.
