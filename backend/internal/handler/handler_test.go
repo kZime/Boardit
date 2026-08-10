@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"backend/internal/database"
+	"backend/internal/model"
 	"backend/internal/testutils"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
@@ -20,10 +23,11 @@ import (
 // AuthTestSuite holds shared state for auth tests
 type AuthTestSuite struct {
 	suite.Suite
-	router       *gin.Engine
-	userID       uint
-	accessToken  string
-	refreshToken string
+	router         *gin.Engine
+	authentication *AuthHandler
+	userID         uint
+	accessToken    string
+	refreshToken   string
 }
 
 func TestAuthSuite(t *testing.T) {
@@ -42,10 +46,11 @@ func (suite *AuthTestSuite) SetupSuite() {
 	// Set up router once for all tests
 	gin.SetMode(gin.TestMode)
 	suite.router = gin.Default()
+	suite.authentication = NewAuthHandler(os.Getenv("JWT_SECRET"))
 	suite.router.POST("/api/auth/register", Register)
-	suite.router.POST("/api/auth/login", Login)
-	suite.router.POST("/api/auth/refresh", Refresh)
-	suite.router.POST("/api/auth/logout", Logout)
+	suite.router.POST("/api/auth/login", suite.authentication.Login)
+	suite.router.POST("/api/auth/refresh", suite.authentication.Refresh)
+	suite.router.POST("/api/auth/logout", suite.authentication.Logout)
 	// Note: For testing GetCurrentUser, we'll handle JWT middleware in the test itself
 	suite.router.GET("/api/user", GetCurrentUser)
 }
@@ -231,6 +236,109 @@ func (suite *AuthTestSuite) TestRefresh() {
 	replayReq.Header.Set("Content-Type", "application/json")
 	suite.router.ServeHTTP(replayW, replayReq)
 	suite.Equal(http.StatusUnauthorized, replayW.Code)
+
+	// Reuse detection revokes the replacement token as part of the same family.
+	replacementBody, err := json.Marshal(refreshRequest{RefreshToken: refreshResponse["refresh_token"].(string)})
+	suite.NoError(err)
+	replacementReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewBuffer(replacementBody))
+	replacementReq.Header.Set("Content-Type", "application/json")
+	replacementW := httptest.NewRecorder()
+	suite.router.ServeHTTP(replacementW, replacementReq)
+	suite.Equal(http.StatusUnauthorized, replacementW.Code)
+
+	var activeSessions int64
+	suite.NoError(database.DB.Model(&model.RefreshSession{}).
+		Where("user_id = ? AND revoked_at IS NULL", suite.userID).
+		Count(&activeSessions).Error)
+	suite.Zero(activeSessions)
+}
+
+func (suite *AuthTestSuite) TestConcurrentReplayRevokesSessionCreatedByDescendantRefresh() {
+	if database.DB.Dialector.Name() != "postgres" {
+		suite.T().Skip("PostgreSQL row-lock regression test")
+	}
+	suite.registerTestUser()
+	suite.loginTestUser()
+	rootToken := suite.refreshToken
+	_, rootTokenID, ok := parseRefreshToken(suite.authentication.jwtSecret, rootToken)
+	suite.Require().True(ok)
+
+	rootBody, err := json.Marshal(refreshRequest{RefreshToken: rootToken})
+	suite.NoError(err)
+	rootReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(rootBody))
+	rootReq.Header.Set("Content-Type", "application/json")
+	rootW := httptest.NewRecorder()
+	suite.router.ServeHTTP(rootW, rootReq)
+	suite.Require().Equal(http.StatusOK, rootW.Code)
+	var rotation map[string]any
+	suite.Require().NoError(json.Unmarshal(rootW.Body.Bytes(), &rotation))
+	childToken := rotation["refresh_token"].(string)
+	_, childTokenID, ok := parseRefreshToken(suite.authentication.jwtSecret, childToken)
+	suite.Require().True(ok)
+
+	triggerSQL := fmt.Sprintf(`
+		CREATE OR REPLACE FUNCTION delay_test_refresh_rotation() RETURNS trigger AS $$
+		BEGIN
+			IF OLD.token_id = '%s' AND OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL THEN
+				PERFORM pg_sleep(0.4);
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER delay_test_refresh_rotation_trigger
+		BEFORE UPDATE ON refresh_sessions
+		FOR EACH ROW EXECUTE FUNCTION delay_test_refresh_rotation();`, childTokenID)
+	suite.Require().NoError(database.DB.Exec(triggerSQL).Error)
+	defer func() {
+		suite.NoError(database.DB.Exec("DROP TRIGGER IF EXISTS delay_test_refresh_rotation_trigger ON refresh_sessions").Error)
+		suite.NoError(database.DB.Exec("DROP FUNCTION IF EXISTS delay_test_refresh_rotation()").Error)
+	}()
+
+	childBody, err := json.Marshal(refreshRequest{RefreshToken: childToken})
+	suite.NoError(err)
+	childStatus := make(chan int, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(childBody))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		suite.router.ServeHTTP(w, req)
+		childStatus <- w.Code
+	}()
+
+	// Do not rely on scheduler timing. The trigger keeps the descendant
+	// rotation open while a separate transaction observes that it owns the
+	// shared family-root lock.
+	lockDeadline := time.Now().Add(3 * time.Second)
+	for {
+		probe := database.DB.Begin()
+		var rootID uint
+		lockErr := probe.Raw(
+			"SELECT id FROM refresh_sessions WHERE token_id = ? FOR UPDATE NOWAIT",
+			rootTokenID,
+		).Scan(&rootID).Error
+		rollbackErr := probe.Rollback().Error
+		if lockErr != nil && strings.Contains(lockErr.Error(), "55P03") {
+			break
+		}
+		suite.Require().NoError(lockErr)
+		suite.Require().NoError(rollbackErr)
+		if time.Now().After(lockDeadline) {
+			suite.T().Fatal("descendant refresh did not acquire the family-root lock before timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	replayReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(rootBody))
+	replayReq.Header.Set("Content-Type", "application/json")
+	replayW := httptest.NewRecorder()
+	suite.router.ServeHTTP(replayW, replayReq)
+
+	suite.Equal(http.StatusOK, <-childStatus)
+	suite.Equal(http.StatusUnauthorized, replayW.Code)
+	var activeSessions int64
+	suite.NoError(database.DB.Model(&model.RefreshSession{}).
+		Where("user_id = ? AND revoked_at IS NULL", suite.userID).
+		Count(&activeSessions).Error)
+	suite.Zero(activeSessions)
 }
 
 func (suite *AuthTestSuite) TestLogoutRevokesRefreshSession() {

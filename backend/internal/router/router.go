@@ -50,6 +50,7 @@ func splitList(value string) []string {
 func SetupWithOptions(db *gorm.DB, options Options) *gin.Engine {
 	r := gin.Default()
 	content := handler.NewContentHandler(noteapp.NewService(noteapp.NewGormRepository(db)))
+	authentication := handler.NewAuthHandler(options.JWTSecret)
 	authenticate := middleware.JWTMiddlewareWithSecret(options.JWTSecret)
 
 	if len(options.TrustedProxies) > 0 {
@@ -70,9 +71,9 @@ func SetupWithOptions(db *gorm.DB, options Options) *gin.Engine {
 	auth := r.Group("/api/auth")
 	{
 		auth.POST("/register", handler.Register)
-		auth.POST("/login", handler.Login)
-		auth.POST("/refresh", handler.Refresh)
-		auth.POST("/logout", handler.Logout)
+		auth.POST("/login", authentication.Login)
+		auth.POST("/refresh", authentication.Refresh)
+		auth.POST("/logout", authentication.Logout)
 	}
 
 	v1 := r.Group("/api/v1")

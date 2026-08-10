@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ------------------------------------------------------------
@@ -106,6 +106,14 @@ const (
 	refreshTokenType = "refresh"
 )
 
+type AuthHandler struct {
+	jwtSecret string
+}
+
+func NewAuthHandler(jwtSecret string) *AuthHandler {
+	return &AuthHandler{jwtSecret: jwtSecret}
+}
+
 func newTokenID() (string, error) {
 	buffer := make([]byte, 16)
 	if _, err := rand.Read(buffer); err != nil {
@@ -120,7 +128,7 @@ type signedAuthToken struct {
 	ExpiresAt time.Time
 }
 
-func signAuthToken(userID uint, tokenType string, ttl time.Duration) (signedAuthToken, error) {
+func signAuthToken(jwtSecret string, userID uint, tokenType string, ttl time.Duration) (signedAuthToken, error) {
 	tokenID, err := newTokenID()
 	if err != nil {
 		return signedAuthToken{}, err
@@ -135,7 +143,7 @@ func signAuthToken(userID uint, tokenType string, ttl time.Duration) (signedAuth
 		"exp": expiresAt.Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	value, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	value, err := token.SignedString([]byte(jwtSecret))
 	if err != nil {
 		return signedAuthToken{}, err
 	}
@@ -147,7 +155,7 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-func Login(c *gin.Context) {
+func (handler *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
@@ -169,19 +177,19 @@ func Login(c *gin.Context) {
 
 	// 3. sign token
 
-	accessToken, err := signAuthToken(user.ID, accessTokenType, accessTokenTTL)
+	accessToken, err := signAuthToken(handler.jwtSecret, user.ID, accessTokenType, accessTokenTTL)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign access token error")
 		return
 	}
 
-	refreshToken, err := signAuthToken(user.ID, refreshTokenType, refreshTokenTTL)
+	refreshToken, err := signAuthToken(handler.jwtSecret, user.ID, refreshTokenType, refreshTokenTTL)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign refresh token error")
 		return
 	}
 	if err := database.DB.Create(&model.RefreshSession{
-		UserID: user.ID, TokenID: refreshToken.ID, ExpiresAt: refreshToken.ExpiresAt,
+		UserID: user.ID, TokenID: refreshToken.ID, FamilyID: refreshToken.ID, ExpiresAt: refreshToken.ExpiresAt,
 		CreatedAt: time.Now().UTC(),
 	}).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "INTERNAL", "create refresh session error")
@@ -203,12 +211,12 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
-func parseRefreshToken(raw string) (uint, string, bool) {
+func parseRefreshToken(jwtSecret, raw string) (uint, string, bool) {
 	token, err := jwt.Parse(raw, func(token *jwt.Token) (interface{}, error) {
 		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(os.Getenv("JWT_SECRET")), nil
+		return []byte(jwtSecret), nil
 	})
 	if err != nil || !token.Valid {
 		return 0, "", false
@@ -228,55 +236,110 @@ func parseRefreshToken(raw string) (uint, string, bool) {
 	return uint(sub), tokenID, true
 }
 
-var errInvalidRefreshSession = errors.New("invalid refresh session")
+func revokeRefreshFamily(tx *gorm.DB, userID uint, familyID string, now time.Time) error {
+	return tx.Model(&model.RefreshSession{}).
+		Where("user_id = ? AND family_id = ? AND revoked_at IS NULL", userID, familyID).
+		Update("revoked_at", now).Error
+}
 
-func Refresh(c *gin.Context) {
+func (handler *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
-	userID, tokenID, ok := parseRefreshToken(req.RefreshToken)
+	userID, tokenID, ok := parseRefreshToken(handler.jwtSecret, req.RefreshToken)
 	if !ok {
 		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid refresh token")
 		return
 	}
 
-	// 2. sign new token
-	newAccessToken, err := signAuthToken(userID, accessTokenType, accessTokenTTL)
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign access token error")
-		return
-	}
-
-	newRefreshToken, err := signAuthToken(userID, refreshTokenType, refreshTokenTTL)
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "INTERNAL", "sign refresh token error")
-		return
-	}
+	var newAccessToken signedAuthToken
+	var newRefreshToken signedAuthToken
+	rejected := false
 	now := time.Now().UTC()
-	err = database.DB.Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&model.RefreshSession{}).
-			Where("user_id = ? AND token_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, tokenID, now).
-			Updates(map[string]any{"revoked_at": now, "replaced_by_token_id": newRefreshToken.ID})
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		var session model.RefreshSession
+		result := tx.
+			Where("user_id = ? AND token_id = ?", userID, tokenID).
+			First(&session)
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			rejected = true
+			return nil
+		}
 		if result.Error != nil {
 			return result.Error
 		}
-		if result.RowsAffected != 1 {
-			return errInvalidRefreshSession
+		familyID := session.FamilyID
+		if familyID == "" {
+			familyID = session.TokenID
+		}
+
+		// Every generation in a refresh family serializes on its immutable root
+		// session. Locking only the presented token allows replay of an ancestor
+		// to race a legitimate refresh of a descendant and miss the newly inserted
+		// session during family revocation.
+		var familyRoot model.RefreshSession
+		result = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ? AND token_id = ?", userID, familyID).
+			First(&familyRoot)
+		if result.Error != nil {
+			return result.Error
+		}
+		result = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", session.ID).
+			First(&session)
+		if result.Error != nil {
+			return result.Error
+		}
+		if session.RevokedAt != nil {
+			if session.ReplacedByTokenID != nil {
+				if err := revokeRefreshFamily(tx, userID, familyID, now); err != nil {
+					return err
+				}
+			}
+			rejected = true
+			return nil
+		}
+		if !session.ExpiresAt.After(now) {
+			rejected = true
+			return nil
+		}
+
+		var signErr error
+		newAccessToken, signErr = signAuthToken(handler.jwtSecret, userID, accessTokenType, accessTokenTTL)
+		if signErr != nil {
+			return signErr
+		}
+		newRefreshToken, signErr = signAuthToken(handler.jwtSecret, userID, refreshTokenType, refreshTokenTTL)
+		if signErr != nil {
+			return signErr
+		}
+		rotation := tx.Model(&model.RefreshSession{}).
+			Where("id = ? AND revoked_at IS NULL", session.ID).
+			Updates(map[string]any{"revoked_at": now, "replaced_by_token_id": newRefreshToken.ID})
+		if rotation.Error != nil {
+			return rotation.Error
+		}
+		if rotation.RowsAffected != 1 {
+			if err := revokeRefreshFamily(tx, userID, familyID, now); err != nil {
+				return err
+			}
+			rejected = true
+			return nil
 		}
 		return tx.Create(&model.RefreshSession{
-			UserID: userID, TokenID: newRefreshToken.ID, ExpiresAt: newRefreshToken.ExpiresAt,
+			UserID: userID, TokenID: newRefreshToken.ID, FamilyID: familyID, ExpiresAt: newRefreshToken.ExpiresAt,
 			CreatedAt: now,
 		}).Error
 	})
-	if errors.Is(err, errInvalidRefreshSession) {
-		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid refresh token")
-		return
-	}
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "INTERNAL", "rotate refresh token error")
+		return
+	}
+	if rejected {
+		response.Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid refresh token")
 		return
 	}
 
@@ -287,13 +350,13 @@ func Refresh(c *gin.Context) {
 	})
 }
 
-func Logout(c *gin.Context) {
+func (handler *AuthHandler) Logout(c *gin.Context) {
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
-	userID, tokenID, ok := parseRefreshToken(req.RefreshToken)
+	userID, tokenID, ok := parseRefreshToken(handler.jwtSecret, req.RefreshToken)
 	if ok {
 		now := time.Now().UTC()
 		database.DB.Model(&model.RefreshSession{}).

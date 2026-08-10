@@ -82,11 +82,12 @@ func TestMigrateIsVersionedAndIdempotent(t *testing.T) {
 
 	var versions int64
 	require.NoError(t, db.Table("schema_migrations").Count(&versions).Error)
-	require.Equal(t, int64(2), versions)
+	require.Equal(t, int64(3), versions)
 	var missingChecksums int64
 	require.NoError(t, db.Table("schema_migrations").Where("checksum = ''").Count(&missingChecksums).Error)
 	require.Zero(t, missingChecksums)
 	require.True(t, db.Migrator().HasColumn("notes", "version"))
+	require.True(t, db.Migrator().HasColumn("refresh_sessions", "family_id"))
 	for _, table := range []string{"note_revisions", "refresh_sessions", "outbox_events", "background_jobs", "ai_runs", "ai_candidates"} {
 		require.Truef(t, db.Migrator().HasTable(table), "expected table %s", table)
 	}
@@ -97,10 +98,17 @@ func TestRollbackLastMigration(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, Migrate(db))
 	require.NoError(t, RollbackLast(db))
+	require.False(t, db.Migrator().HasColumn("refresh_sessions", "family_id"))
+	require.True(t, db.Migrator().HasTable("ai_candidates"))
+
+	var versions int64
+	require.NoError(t, db.Table("schema_migrations").Count(&versions).Error)
+	require.Equal(t, int64(2), versions)
+
+	require.NoError(t, RollbackLast(db))
 
 	require.False(t, db.Migrator().HasTable("ai_candidates"))
 	require.False(t, db.Migrator().HasColumn("notes", "version"))
-	var versions int64
 	require.NoError(t, db.Table("schema_migrations").Count(&versions).Error)
 	require.Equal(t, int64(1), versions)
 }

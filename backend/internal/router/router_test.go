@@ -95,6 +95,57 @@ func (suite *RouterTestSuite) TestAuthRoutes() {
 	}
 }
 
+func (suite *RouterTestSuite) TestInjectedJWTSecretIsUsedByHandlersAndMiddleware() {
+	suite.T().Setenv("JWT_SECRET", "different-environment-secret-value")
+	injectedSecret := "injected-router-secret-at-least-32-chars"
+	r := SetupWithOptions(database.DB, Options{
+		JWTSecret:   injectedSecret,
+		CORSOrigins: []string{"http://localhost:5173"},
+	})
+
+	registerBody, err := json.Marshal(map[string]string{
+		"username": "injected-secret-user",
+		"email":    "injected-secret@example.com",
+		"password": "testpassword",
+	})
+	suite.NoError(err)
+	registerReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewReader(registerBody))
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerW := httptest.NewRecorder()
+	r.ServeHTTP(registerW, registerReq)
+	suite.Equal(http.StatusCreated, registerW.Code)
+
+	loginBody, err := json.Marshal(map[string]string{
+		"email":    "injected-secret@example.com",
+		"password": "testpassword",
+	})
+	suite.NoError(err)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginW := httptest.NewRecorder()
+	r.ServeHTTP(loginW, loginReq)
+	suite.Equal(http.StatusOK, loginW.Code)
+
+	var tokens map[string]any
+	suite.NoError(json.Unmarshal(loginW.Body.Bytes(), &tokens))
+	accessToken := tokens["access_token"].(string)
+	refreshToken := tokens["refresh_token"].(string)
+
+	userReq := httptest.NewRequest(http.MethodGet, "/api/user", nil)
+	userReq.Header.Set("Authorization", "Bearer "+accessToken)
+	userW := httptest.NewRecorder()
+	r.ServeHTTP(userW, userReq)
+	suite.Equal(http.StatusOK, userW.Code)
+
+	refreshBody, err := json.Marshal(map[string]string{"refresh_token": refreshToken})
+	suite.NoError(err)
+	refreshReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewReader(refreshBody))
+	refreshReq.Header.Set("Content-Type", "application/json")
+	refreshW := httptest.NewRecorder()
+	r.ServeHTTP(refreshW, refreshReq)
+	suite.Equal(http.StatusOK, refreshW.Code)
+}
+
 func (suite *RouterTestSuite) TestUserRouteWithAuth() {
 	// Test that /api/user requires authentication
 	req, err := http.NewRequest("GET", "/api/user", nil)
