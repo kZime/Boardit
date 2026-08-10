@@ -1,14 +1,16 @@
 import type { UpdateNoteRequest } from '../../api/gen/models/updateNoteRequest'
+import type { Note } from '../../api/gen/models/note'
 import type { PageDetails } from './types'
 
 interface SaveInput {
   noteID: number
   markdown: string
   details: PageDetails
+  version: number
 }
 
 interface SaveDependencies {
-  updateNote: (noteID: number, request: UpdateNoteRequest) => Promise<void>
+  updateNote: (noteID: number, request: UpdateNoteRequest) => Promise<Note>
 }
 
 export interface SavedSnapshot {
@@ -33,20 +35,24 @@ export function isDirty(markdown: string, details: PageDetails, saved: SavedSnap
   )
 }
 
-export function buildUpdateRequest(markdown: string, details: PageDetails): UpdateNoteRequest {
+export function buildUpdateRequest(markdown: string, details: PageDetails, version: number): UpdateNoteRequest {
   return {
     title: details.title,
     cover_url: details.coverUrl,
     content_md: markdown,
     is_published: details.visibility !== 'private',
     visibility: details.visibility,
+    version,
   }
 }
 
 export async function saveExistingNote(
   dependencies: SaveDependencies,
   input: SaveInput,
-): Promise<SavedSnapshot> {
-  await dependencies.updateNote(input.noteID, buildUpdateRequest(input.markdown, input.details))
-  return snapshotOf(input.markdown, input.details)
+): Promise<{ snapshot: SavedSnapshot; version: number }> {
+  const saved = await dependencies.updateNote(
+    input.noteID,
+    buildUpdateRequest(input.markdown, input.details, input.version),
+  )
+  return { snapshot: snapshotOf(input.markdown, input.details), version: saved.version }
 }

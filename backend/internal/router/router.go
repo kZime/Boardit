@@ -72,6 +72,7 @@ func SetupWithOptions(db *gorm.DB, options Options) *gin.Engine {
 		auth.POST("/register", handler.Register)
 		auth.POST("/login", handler.Login)
 		auth.POST("/refresh", handler.Refresh)
+		auth.POST("/logout", handler.Logout)
 	}
 
 	v1 := r.Group("/api/v1")
@@ -84,9 +85,10 @@ func SetupWithOptions(db *gorm.DB, options Options) *gin.Engine {
 		}
 		notes := v1.Group("/notes")
 		{
-			notes.POST("", authenticate, content.CreateNote)       // POST /api/v1/notes
-			notes.GET("", authenticate, content.ListNotes)         // GET /api/v1/notes
-			notes.GET("/:id", authenticate, content.GetNote)       // GET /api/v1/notes/{id}
+			notes.POST("", authenticate, content.CreateNote) // POST /api/v1/notes
+			notes.GET("", authenticate, content.ListNotes)   // GET /api/v1/notes
+			notes.GET("/:id", authenticate, content.GetNote) // GET /api/v1/notes/{id}
+			notes.GET("/:id/revisions", authenticate, content.ListNoteRevisions)
 			notes.PATCH("/:id", authenticate, content.UpdateNote)  // PATCH /api/v1/notes/{id}
 			notes.DELETE("/:id", authenticate, content.DeleteNote) // DELETE /api/v1/notes/{id}
 		}

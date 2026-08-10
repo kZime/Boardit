@@ -36,8 +36,20 @@ type Note struct {
 	IsPublished bool   `json:"is_published"`
 	Visibility  string `json:"visibility"`
 	SortOrder   int    `json:"sort_order"`
+	Version     uint64 `json:"version"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type NoteRevision struct {
+	ID          uint   `json:"id"`
+	NoteID      uint   `json:"note_id"`
+	Version     uint64 `json:"version"`
+	Title       string `json:"title"`
+	ContentMD   string `json:"content_md"`
+	ContentHTML string `json:"content_html"`
+	Source      string `json:"source"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type NotePage struct {
@@ -68,6 +80,7 @@ type UpdateNoteInput struct {
 	ContentMD   *string      `json:"content_md"`
 	IsPublished *bool        `json:"is_published"`
 	Visibility  *string      `json:"visibility"`
+	Version     *uint64      `json:"version"`
 	UpdatedAt   string       `json:"updated_at"`
 }
 

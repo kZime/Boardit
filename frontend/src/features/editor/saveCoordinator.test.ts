@@ -12,11 +12,11 @@ const details = {
 
 describe('editor save coordinator', () => {
   it('persists the complete editor state and returns its saved snapshot', async () => {
-    const updateNote = vi.fn().mockResolvedValue(undefined)
+    const updateNote = vi.fn().mockResolvedValue({ version: 8 })
 
     const snapshot = await saveExistingNote(
       { updateNote },
-      { noteID: 42, markdown: '# body', details },
+      { noteID: 42, markdown: '# body', details, version: 7 },
     )
 
     expect(updateNote).toHaveBeenCalledWith(42, {
@@ -25,8 +25,12 @@ describe('editor save coordinator', () => {
       content_md: '# body',
       is_published: true,
       visibility: 'unlisted',
+      version: 7,
     })
-    expect(snapshot).toEqual({ md: '# body', title: 'Published note', visibility: 'unlisted' })
+    expect(snapshot).toEqual({
+      snapshot: { md: '# body', title: 'Published note', visibility: 'unlisted' },
+      version: 8,
+    })
   })
 
   it('detects changes relative to the saved snapshot', () => {

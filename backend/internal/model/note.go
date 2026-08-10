@@ -15,6 +15,7 @@ type Note struct {
 	IsPublished bool      `gorm:"not null;default:false"                              json:"is_published"`
 	Visibility  string    `gorm:"type:varchar(20);not null;default:'private'"         json:"visibility"`
 	SortOrder   int       `gorm:"not null;default:0"                                  json:"sort_order"`
+	Version     uint64    `gorm:"not null;default:1"                                  json:"version"`
 	CreatedAt   time.Time `gorm:"not null"                                            json:"created_at"`
 	UpdatedAt   time.Time `gorm:"not null"                                            json:"updated_at"`
 }

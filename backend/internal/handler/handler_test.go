@@ -45,6 +45,7 @@ func (suite *AuthTestSuite) SetupSuite() {
 	suite.router.POST("/api/auth/register", Register)
 	suite.router.POST("/api/auth/login", Login)
 	suite.router.POST("/api/auth/refresh", Refresh)
+	suite.router.POST("/api/auth/logout", Logout)
 	// Note: For testing GetCurrentUser, we'll handle JWT middleware in the test itself
 	suite.router.GET("/api/user", GetCurrentUser)
 }
@@ -223,6 +224,32 @@ func (suite *AuthTestSuite) TestRefresh() {
 	// Check the new tokens are different from the old ones
 	suite.NotEqual(suite.refreshToken, refreshResponse["refresh_token"], "Expected new refresh token")
 	suite.NotEqual(suite.accessToken, refreshResponse["access_token"], "Expected new access token")
+
+	// Rotation is single-use: replaying the old token must fail.
+	replayW := httptest.NewRecorder()
+	replayReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewBuffer(refreshBody))
+	replayReq.Header.Set("Content-Type", "application/json")
+	suite.router.ServeHTTP(replayW, replayReq)
+	suite.Equal(http.StatusUnauthorized, replayW.Code)
+}
+
+func (suite *AuthTestSuite) TestLogoutRevokesRefreshSession() {
+	suite.registerTestUser()
+	suite.loginTestUser()
+	body, err := json.Marshal(refreshRequest{RefreshToken: suite.refreshToken})
+	suite.NoError(err)
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/auth/logout", bytes.NewBuffer(body))
+	logoutReq.Header.Set("Content-Type", "application/json")
+	logoutW := httptest.NewRecorder()
+	suite.router.ServeHTTP(logoutW, logoutReq)
+	suite.Equal(http.StatusNoContent, logoutW.Code)
+
+	refreshReq := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", bytes.NewBuffer(body))
+	refreshReq.Header.Set("Content-Type", "application/json")
+	refreshW := httptest.NewRecorder()
+	suite.router.ServeHTTP(refreshW, refreshReq)
+	suite.Equal(http.StatusUnauthorized, refreshW.Code)
 }
 
 func (suite *AuthTestSuite) TestRefreshRejectsAccessToken() {

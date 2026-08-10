@@ -53,7 +53,9 @@ jobs:
         run: go vet ./...
       - name: Test
         working-directory: backend
-        run: go test -race ./...
+        # Packages share the one ephemeral PostgreSQL database; serialize packages
+        # while retaining the race detector inside each test binary.
+        run: go test -race -p 1 ./...
 
   frontend:
     name: Frontend quality gates

@@ -29,6 +29,7 @@ const nowIso = () => new Date().toISOString()
       is_published: partial.is_published ?? false,
       visibility: (partial.visibility as Note['visibility']) ?? NoteVisibility.private,
       sort_order: partial.sort_order ?? notesDb.length,
+      version: partial.version ?? 1,
       created_at: partial.created_at ?? iso(new Date(base.getTime() - 1000 * 60 * 60)),
       updated_at: partial.updated_at ?? iso(now),
     }
@@ -105,6 +106,7 @@ export const createNoteHandler = http.post('*/api/v1/notes', async ({ request })
     is_published: false,
     visibility: NoteVisibility.private,
     sort_order: notesDb.length,
+    version: 1,
     created_at: ts,
     updated_at: ts,
   }
@@ -132,6 +134,14 @@ export const updateNoteHandler = http.patch('*/api/v1/notes/:id', async ({ param
 
   const patch = (await request.json()) as UpdateNoteRequest
   const prev = notesDb[idx]
+  if (patch.version !== undefined && patch.version !== prev.version) {
+    return HttpResponse.json({
+      error: 'VERSION_CONFLICT',
+      message: 'note has been modified by another client',
+      server_updated_at: prev.updated_at,
+      server_snapshot: prev,
+    }, { status: 409 })
+  }
   const updated: Note = {
     ...prev,
     title: patch.title ?? prev.title,
@@ -141,6 +151,7 @@ export const updateNoteHandler = http.patch('*/api/v1/notes/:id', async ({ param
     is_published: patch.is_published ?? prev.is_published,
     visibility: (patch.visibility as Note['visibility']) ?? prev.visibility,
     slug: prev.slug,
+    version: prev.version + 1,
     updated_at: nowIso(),
   }
 
@@ -216,4 +227,3 @@ export const noteMockHandlers = [
   listPublicNotesHandler,
   getPublicNoteHandler,
 ]
-

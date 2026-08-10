@@ -7,7 +7,9 @@
 | POST   | `/api/auth/register` | `{ username, email, password }`, return new user info (without password) |
 | POST   | `/api/auth/login`    | `{ email, password }`, return `{ access_token, refresh_token, expires_in }`    |
 | POST   | `/api/auth/refresh`  | `{ refresh_token }`, return new `{ access_token, refresh_token, expires_in }` |
+| POST   | `/api/auth/logout`   | revoke the supplied refresh session |
 | GET    | `/api/user`          | get current user info (need to carry `Authorization: Bearer <access_token>` in Header) |
+| GET    | `/api/v1/notes/:id/revisions` | list immutable revisions owned by the current user |
 
 ## Architecture
 
@@ -22,6 +24,13 @@ Gin router -> HTTP adapters -> noteapp.Service -> Repository -> GORM/PostgreSQL
 - `internal/noteapp/repository.go` is the persistence boundary; GORM models never appear in public use-case inputs or outputs.
 - `internal/config` validates runtime settings before database or router initialization.
 - Future AI commands must call `noteapp.Service`; they must not write GORM models directly.
+
+## Database evolution
+
+- Application startup runs embedded, versioned SQL migrations instead of GORM `AutoMigrate`.
+- Note create/update writes the current note, immutable revision and outbox event atomically.
+- Migration commands and rollback safety are documented in [`docs/database-migrations.md`](docs/database-migrations.md).
+- Provider-neutral jobs, AI runs and candidate boundaries are documented in [`docs/ai-data-boundaries.md`](docs/ai-data-boundaries.md).
 
 ## Testing
 

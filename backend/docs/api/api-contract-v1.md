@@ -93,7 +93,15 @@
   { "error": "UNAUTHORIZED", "message": "invalid refresh token" }
   ```
 
-### 1.4 Get Current User
+Refresh tokens are single-use: a successful refresh revokes the supplied session and returns a replacement. Replaying the old token returns 401.
+
+### 1.4 Logout
+
+* **POST** `/api/auth/logout`
+* **Body**：`{ "refresh_token": "<jwt>" }`
+* **204**：The refresh session is revoked or already unavailable.
+
+### 1.5 Get Current User
 
 * **GET** `/api/user`
 * **Headers**：`Authorization: Bearer <access_token>`
@@ -121,6 +129,7 @@
   "is_published": false,
   "visibility": "private",
   "sort_order": 0,
+  "version": 3,
   "created_at": "2025-08-13T21:30:00Z",
   "updated_at": "2025-08-13T21:31:12Z"
 }
@@ -140,17 +149,22 @@
 }
 ```
 
-### 2.3 NoteRevisionDTO (TODO)
+### 2.3 NoteRevisionDTO
 
 ```json
 {
   "id": 99,
   "note_id": 12,
+  "version": 3,
+  "title": "Hello",
   "content_md": "# Hello (old)",
-  "diff": null,
+  "content_html": "<h1>Hello (old)</h1>",
+  "source": "user",
   "created_at": "2025-08-13T21:31:12Z"
 }
 ```
+
+Revisions are immutable accepted snapshots. `GET /api/v1/notes/{id}/revisions` returns newest first and scopes the note to the authenticated user.
 
 ---
 
@@ -184,7 +198,7 @@
 ### 3.3 Update Note (Autosave & Optimistic Concurrency)
 
 * **PATCH** `/api/v1/notes/{id}`
-* **Body** (Some fields are optional; it's recommended to include `updated_at` for optimistic concurrency)
+* **Body** (Some fields are optional; include `version` for optimistic concurrency. `updated_at` remains supported for compatibility.)
 
   ```json
   {
@@ -193,7 +207,7 @@
     "content_md": "# Edited ...",
     "is_published": false,
     "visibility": "private",
-    "updated_at": "2025-08-13T21:31:12Z"
+    "version": 3
   }
   ```
 
@@ -202,7 +216,7 @@
   * If `content_md` changes: Server renders to `content_html` and performs **XSS cleaning** (strict whitelist).
   * Record a `note_revisions` (diff can be empty for now).
   * **Autosave Idempotent**：If content hasn't changed, return 200 directly, `updated_at` remains unchanged.
-  * **Concurrency Conflict**：Client-provided `updated_at` doesn't match server → `409 VERSION_CONFLICT`.
+  * **Concurrency Conflict**：Client-provided `version` or `updated_at` doesn't match server → `409 VERSION_CONFLICT`.
 * **200**：Return updated `NoteDTO`
 * **409** (Version Conflict)
 
@@ -241,6 +255,12 @@
     "offset": 0
   }
   ```
+
+### 3.6 List Note Revisions
+
+* **GET** `/api/v1/notes/{id}/revisions`
+* **200**：Newest immutable accepted snapshot first.
+* **404**：The note does not exist or belongs to another user.
 
 ---
 

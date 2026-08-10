@@ -25,9 +25,59 @@ func toNoteDTO(note model.Note) Note {
 		ID: note.ID, UserID: note.UserID, FolderID: note.FolderID, Title: note.Title,
 		Slug: note.Slug, CoverURL: note.CoverURL, ContentMD: note.ContentMd,
 		ContentHTML: note.ContentHtml, IsPublished: note.IsPublished,
-		Visibility: note.Visibility, SortOrder: note.SortOrder,
+		Visibility: note.Visibility, SortOrder: note.SortOrder, Version: note.Version,
 		CreatedAt: formatTimestamp(note.CreatedAt), UpdatedAt: formatTimestamp(note.UpdatedAt),
 	}
+}
+
+func toRevisionDTO(revision model.NoteRevision) NoteRevision {
+	return NoteRevision{
+		ID: revision.ID, NoteID: revision.NoteID, Version: revision.Version,
+		Title: revision.Title, ContentMD: revision.ContentMd, ContentHTML: revision.ContentHtml,
+		Source: revision.Source, CreatedAt: formatTimestamp(revision.CreatedAt),
+	}
+}
+
+func recordOutboxEvent(ctx context.Context, repository Repository, note model.Note, eventType string) error {
+	event := model.OutboxEvent{
+		UserID: note.UserID, AggregateType: "note", AggregateID: note.ID,
+		AggregateVersion: note.Version, EventType: eventType,
+		Payload: fmt.Sprintf(`{"note_id":%d,"user_id":%d,"version":%d}`, note.ID, note.UserID, note.Version),
+		Status:  "pending", AvailableAt: note.UpdatedAt, CreatedAt: note.UpdatedAt,
+	}
+	if err := repository.CreateOutboxEvent(ctx, &event); err != nil {
+		return internal("failed to create note change event", err)
+	}
+	return nil
+}
+
+func recordNoteChange(ctx context.Context, repository Repository, note model.Note, eventType string) error {
+	revision := model.NoteRevision{
+		NoteID: note.ID, UserID: note.UserID, Version: note.Version, Title: note.Title,
+		ContentMd: note.ContentMd, ContentHtml: note.ContentHtml, Source: "user", CreatedAt: note.UpdatedAt,
+	}
+	if err := repository.CreateNoteRevision(ctx, &revision); err != nil {
+		return internal("failed to create note revision", err)
+	}
+	return recordOutboxEvent(ctx, repository, note, eventType)
+}
+
+func persistNoteChange(ctx context.Context, repository Repository, note *model.Note, expectedVersion uint64, eventType string) error {
+	saved, err := repository.SaveNoteIfVersion(ctx, note, expectedVersion)
+	if err != nil {
+		return internal("failed to update note", err)
+	}
+	if !saved {
+		current, findErr := repository.FindNote(ctx, note.UserID, note.ID)
+		if findErr != nil {
+			return internal("failed to reload conflicting note", findErr)
+		}
+		return &ConflictError{
+			ServerUpdatedAt: formatTimestamp(current.UpdatedAt),
+			ServerSnapshot:  toNoteDTO(current),
+		}
+	}
+	return recordNoteChange(ctx, repository, *note, eventType)
 }
 
 func toFolderDTO(folder model.Folder) Folder {
@@ -128,10 +178,15 @@ func (service *Service) CreateNote(ctx context.Context, userID uint, input Creat
 	note := model.Note{
 		UserID: userID, FolderID: input.FolderID, Title: input.Title, Slug: slug,
 		ContentMd: input.ContentMD, ContentHtml: convertMarkdownToHTML(input.ContentMD),
-		Visibility: "private", CreatedAt: now, UpdatedAt: now,
+		Visibility: "private", Version: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := service.repository.CreateNote(ctx, &note); err != nil {
-		return Note{}, internal("failed to create note", err)
+	if err := service.repository.WithinTransaction(ctx, func(transaction Repository) error {
+		if err := transaction.CreateNote(ctx, &note); err != nil {
+			return internal("failed to create note", err)
+		}
+		return recordNoteChange(ctx, transaction, note, "note.created")
+	}); err != nil {
+		return Note{}, err
 	}
 	return toNoteDTO(note), nil
 }
@@ -141,12 +196,31 @@ func validVisibility(visibility string) bool {
 }
 
 func (service *Service) UpdateNote(ctx context.Context, userID, noteID uint, input UpdateNoteInput) (Note, error) {
+	var updated Note
+	err := service.repository.WithinTransaction(ctx, func(transaction Repository) error {
+		var updateErr error
+		updated, updateErr = NewService(transaction).updateNoteInTransaction(ctx, userID, noteID, input)
+		return updateErr
+	})
+	if err != nil {
+		return Note{}, err
+	}
+	return updated, nil
+}
+
+func (service *Service) updateNoteInTransaction(ctx context.Context, userID, noteID uint, input UpdateNoteInput) (Note, error) {
 	note, err := service.repository.FindNote(ctx, userID, noteID)
 	if errors.Is(err, ErrRepositoryNotFound) {
 		return Note{}, notFound("note not found")
 	}
 	if err != nil {
 		return Note{}, internal("failed to get note", err)
+	}
+	if input.Version != nil && note.Version != *input.Version {
+		return Note{}, &ConflictError{
+			ServerUpdatedAt: formatTimestamp(note.UpdatedAt),
+			ServerSnapshot:  toNoteDTO(note),
+		}
 	}
 	if input.UpdatedAt != "" {
 		expected, parseErr := time.Parse(time.RFC3339, input.UpdatedAt)
@@ -200,25 +274,52 @@ func (service *Service) UpdateNote(ctx context.Context, userID, noteID uint, inp
 	if !hasChanges {
 		return toNoteDTO(note), nil
 	}
+	expectedVersion := note.Version
+	note.Version++
 	note.UpdatedAt = nowTimestamp()
-	if err := service.repository.SaveNote(ctx, &note); err != nil {
-		return Note{}, internal("failed to update note", err)
+	if err := persistNoteChange(ctx, service.repository, &note, expectedVersion, "note.updated"); err != nil {
+		return Note{}, err
 	}
 	return toNoteDTO(note), nil
 }
 
-func (service *Service) DeleteNote(ctx context.Context, userID, noteID uint) error {
-	note, err := service.repository.FindNote(ctx, userID, noteID)
-	if errors.Is(err, ErrRepositoryNotFound) {
-		return notFound("note not found")
+func (service *Service) ListNoteRevisions(ctx context.Context, userID, noteID uint) ([]NoteRevision, error) {
+	if _, err := service.repository.FindNote(ctx, userID, noteID); err != nil {
+		if errors.Is(err, ErrRepositoryNotFound) {
+			return nil, notFound("note not found")
+		}
+		return nil, internal("failed to get note", err)
 	}
+	revisions, err := service.repository.ListNoteRevisions(ctx, userID, noteID)
 	if err != nil {
-		return internal("failed to get note", err)
+		return nil, internal("failed to list note revisions", err)
 	}
-	if err := service.repository.DeleteNote(ctx, &note); err != nil {
-		return internal("failed to delete note", err)
+	result := make([]NoteRevision, 0, len(revisions))
+	for _, revision := range revisions {
+		result = append(result, toRevisionDTO(revision))
 	}
-	return nil
+	return result, nil
+}
+
+func (service *Service) DeleteNote(ctx context.Context, userID, noteID uint) error {
+	return service.repository.WithinTransaction(ctx, func(transaction Repository) error {
+		note, err := transaction.FindNote(ctx, userID, noteID)
+		if errors.Is(err, ErrRepositoryNotFound) {
+			return notFound("note not found")
+		}
+		if err != nil {
+			return internal("failed to get note", err)
+		}
+		note.Version++
+		note.UpdatedAt = nowTimestamp()
+		if err := recordOutboxEvent(ctx, transaction, note, "note.deleted"); err != nil {
+			return err
+		}
+		if err := transaction.DeleteNote(ctx, &note); err != nil {
+			return internal("failed to delete note", err)
+		}
+		return nil
+	})
 }
 
 func (service *Service) ListFolders(ctx context.Context, userID uint) (FolderList, error) {
@@ -364,8 +465,11 @@ func (service *Service) Reorder(ctx context.Context, userID uint, input ReorderI
 			}
 			note.SortOrder = item.SortOrder
 			note.FolderID = item.FolderID
-			if err := transaction.SaveNote(ctx, &note); err != nil {
-				return internal("failed to update note", err)
+			expectedVersion := note.Version
+			note.Version++
+			note.UpdatedAt = nowTimestamp()
+			if err := persistNoteChange(ctx, transaction, &note, expectedVersion, "note.updated"); err != nil {
+				return err
 			}
 		}
 		return nil

@@ -9,12 +9,16 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { NoteRevisionSource } from './noteRevisionSource';
 
 export interface NoteRevision {
   id: number;
   note_id: number;
+  /** @minimum 1 */
+  version: number;
+  title: string;
   content_md: string;
-  /** @nullable */
-  diff?: string | null;
+  content_html: string;
+  source: NoteRevisionSource;
   created_at: string;
 }

@@ -61,6 +61,7 @@ export default function Editor() {
   const [open, setOpen] = useState(true);
   // Current note being edited
   const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<number | null>(null);
 
   // Current markdown content being edited
   const defaultTitle = "Untitled Page";
@@ -137,6 +138,7 @@ export default function Editor() {
       const title = note.title || "Untitled";
       const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
       setCurrentNoteId(note.id);
+      setCurrentVersion(note.version);
       setMd(note.content_md || "");
       setPageDetails({
         title,
@@ -205,6 +207,7 @@ export default function Editor() {
         const title = result.data.title || defaultTitle;
         const vis = result.data.visibility || "private";
         setCurrentNoteId(result.data.id);
+        setCurrentVersion(result.data.version);
         setMd(result.data.content_md || "");
         setPageDetails({
           title,
@@ -226,6 +229,7 @@ export default function Editor() {
       await deleteNoteMutation.mutateAsync({ id });
       if (currentNoteId === id) {
         setCurrentNoteId(null);
+        setCurrentVersion(null);
         setMd(defaultMd);
         setPageDetails({
           title: defaultTitle,
@@ -243,7 +247,7 @@ export default function Editor() {
   };
 
   const handleSave = async () => {
-    if (!currentNoteId) {
+    if (!currentNoteId || currentVersion === null) {
       // Create new note if no current note
       await handleNew();
       return true;
@@ -252,15 +256,18 @@ export default function Editor() {
     try {
       const saved = await saveExistingNote({
         updateNote: async (noteID, request) => {
-          await updateNoteMutation.mutateAsync({ id: noteID, data: request });
+          const response = await updateNoteMutation.mutateAsync({ id: noteID, data: request });
+          return response.data;
         },
       }, {
         noteID: currentNoteId,
         markdown: md,
         details: pageDetails,
+        version: currentVersion,
       });
       refetchNotes(); // Refresh the notes list
-      lastSavedRef.current = saved;
+      lastSavedRef.current = saved.snapshot;
+      setCurrentVersion(saved.version);
       isDirtyRef.current = false;
 
       // Show success notification
@@ -282,6 +289,7 @@ export default function Editor() {
     const title = note.title || "Untitled";
     const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
     setCurrentNoteId(note.id);
+    setCurrentVersion(note.version);
     setMd(note.content_md || "");
     setPageDetails({
       title,
@@ -312,10 +320,12 @@ export default function Editor() {
 
   const handleMoveNote = async (noteId: number, folderId: number | null) => {
     try {
-      await updateNoteMutation.mutateAsync({
+      const target = items.find((note) => note.id === noteId);
+      const response = await updateNoteMutation.mutateAsync({
         id: noteId,
-        data: { folder_id: folderId },
+        data: { folder_id: folderId, version: target?.version },
       });
+      if (noteId === currentNoteId) setCurrentVersion(response.data.version);
       refetchNotes();
     } catch (error) {
       console.error("Failed to move note:", error);

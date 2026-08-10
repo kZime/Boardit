@@ -29,6 +29,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AuthLogoutBody,
   AuthRefreshBody,
   AuthTokens,
   CreateFolderRequest,
@@ -40,6 +41,7 @@ import type {
   ListPublicNotesParams,
   LoginRequest,
   Note,
+  NoteRevision,
   NotesPage,
   PublicNote,
   PublicNotesPage,
@@ -273,6 +275,71 @@ export const useAuthRefresh = <TError = Error,
         TContext
       > => {
       return useMutation(getAuthRefreshMutationOptions(options), queryClient);
+    }
+
+/**
+ * @summary Revoke a refresh session
+ */
+export const authLogout = (
+    authLogoutBody: AuthLogoutBody,
+ signal?: AbortSignal
+) => {
+
+
+      return orvalRequester<void>(
+      {url: `/api/auth/logout`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: authLogoutBody, signal
+    },
+      );
+    }
+
+
+
+
+export const getAuthLogoutMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError,{data: AuthLogoutBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError,{data: AuthLogoutBody}, TContext> => {
+
+const mutationKey = ['authLogout'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authLogout>>, {data: AuthLogoutBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authLogout(data,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof authLogout>>>
+    export type AuthLogoutMutationBody = AuthLogoutBody
+    export type AuthLogoutMutationError = unknown
+
+    /**
+ * @summary Revoke a refresh session
+ */
+export const useAuthLogout = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError,{data: AuthLogoutBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof authLogout>>,
+        TError,
+        {data: AuthLogoutBody},
+        TContext
+      > => {
+      return useMutation(getAuthLogoutMutationOptions(options), queryClient);
     }
 
 /**
@@ -944,6 +1011,99 @@ export const useDeleteNote = <TError = Error,
     }
 
 /**
+ * @summary List immutable revisions for a note owned by the current user
+ */
+export const listNoteRevisions = (
+    id: number,
+ signal?: AbortSignal
+) => {
+
+
+      return orvalRequester<NoteRevision[]>(
+      {url: `/api/v1/notes/${id}/revisions`, method: 'GET', signal
+    },
+      );
+    }
+
+
+
+
+export const getListNoteRevisionsQueryKey = (id: number,) => {
+    return [
+    `/api/v1/notes/${id}/revisions`
+    ] as const;
+    }
+
+
+export const getListNoteRevisionsQueryOptions = <TData = Awaited<ReturnType<typeof listNoteRevisions>>, TError = Error>(id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNoteRevisions>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListNoteRevisionsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNoteRevisions>>> = ({ signal }) => listNoteRevisions(id, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listNoteRevisions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListNoteRevisionsQueryResult = NonNullable<Awaited<ReturnType<typeof listNoteRevisions>>>
+export type ListNoteRevisionsQueryError = Error
+
+
+export function useListNoteRevisions<TData = Awaited<ReturnType<typeof listNoteRevisions>>, TError = Error>(
+ id: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNoteRevisions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listNoteRevisions>>,
+          TError,
+          Awaited<ReturnType<typeof listNoteRevisions>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListNoteRevisions<TData = Awaited<ReturnType<typeof listNoteRevisions>>, TError = Error>(
+ id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNoteRevisions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listNoteRevisions>>,
+          TError,
+          Awaited<ReturnType<typeof listNoteRevisions>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListNoteRevisions<TData = Awaited<ReturnType<typeof listNoteRevisions>>, TError = Error>(
+ id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNoteRevisions>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List immutable revisions for a note owned by the current user
+ */
+
+export function useListNoteRevisions<TData = Awaited<ReturnType<typeof listNoteRevisions>>, TError = Error>(
+ id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNoteRevisions>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListNoteRevisionsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+/**
  * @summary List folders
  */
 export const listFolders = (
@@ -1306,15 +1466,17 @@ export const getGetCurrentUserResponseMock = (overrideResponse: Partial<Extract<
 
 export const getListPublicNotesResponseMock = (overrideResponse: Partial<Extract<PublicNotesPage, object>> = {}): PublicNotesPage => ({items: Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.number.int(), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.string.alpha({length: {min: 10, max: 20}}), user_id: faker.number.int(), author_username: faker.string.alpha({length: {min: 10, max: 20}}), excerpt: faker.string.alpha({length: {min: 10, max: 20}}), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'})), total: faker.number.int(), limit: faker.number.int(), offset: faker.number.int(), ...overrideResponse})
 
-export const getGetPublicNoteResponseMock = (): PublicNote => ({...{id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'},...{author_username: faker.string.alpha({length: {min: 10, max: 20}})},})
+export const getGetPublicNoteResponseMock = (): PublicNote => ({...{id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), version: faker.number.int({min: 1}), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'},...{author_username: faker.string.alpha({length: {min: 10, max: 20}})},})
 
-export const getListNotesResponseMock = (overrideResponse: Partial<Extract<NotesPage, object>> = {}): NotesPage => ({items: Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'})), total: faker.number.int(), limit: faker.number.int(), offset: faker.number.int(), ...overrideResponse})
+export const getListNotesResponseMock = (overrideResponse: Partial<Extract<NotesPage, object>> = {}): NotesPage => ({items: Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), version: faker.number.int({min: 1}), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'})), total: faker.number.int(), limit: faker.number.int(), offset: faker.number.int(), ...overrideResponse})
 
-export const getCreateNoteResponseMock = (overrideResponse: Partial<Extract<Note, object>> = {}): Note => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z', ...overrideResponse})
+export const getCreateNoteResponseMock = (overrideResponse: Partial<Extract<Note, object>> = {}): Note => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), version: faker.number.int({min: 1}), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z', ...overrideResponse})
 
-export const getGetNoteResponseMock = (overrideResponse: Partial<Extract<Note, object>> = {}): Note => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z', ...overrideResponse})
+export const getGetNoteResponseMock = (overrideResponse: Partial<Extract<Note, object>> = {}): Note => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), version: faker.number.int({min: 1}), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z', ...overrideResponse})
 
-export const getUpdateNoteResponseMock = (overrideResponse: Partial<Extract<Note, object>> = {}): Note => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z', ...overrideResponse})
+export const getUpdateNoteResponseMock = (overrideResponse: Partial<Extract<Note, object>> = {}): Note => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), version: faker.number.int({min: 1}), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z', ...overrideResponse})
+
+export const getListNoteRevisionsResponseMock = (): NoteRevision[] => (Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.number.int(), note_id: faker.number.int(), version: faker.number.int({min: 1}), title: faker.string.alpha({length: {min: 10, max: 20}}), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), source: faker.helpers.arrayElement(['user','ai'] as const), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z'})))
 
 export const getListFoldersResponseMock = (overrideResponse: Partial<Extract<FolderList, object>> = {}): FolderList => ({items: Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.number.int(), user_id: faker.number.int(), name: faker.string.alpha({length: {min: 10, max: 20}}), parent_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'})), ...overrideResponse})
 
@@ -1357,6 +1519,16 @@ export const getAuthRefreshMockHandler = (overrideResponse?: AuthTokens | ((info
     ? (typeof overrideResponse === "function" ? await overrideResponse(info) : overrideResponse)
     : getAuthRefreshResponseMock(),
       { status: 200
+      })
+  }, options)
+}
+
+export const getAuthLogoutMockHandler = (overrideResponse?: void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void), options?: RequestHandlerOptions) => {
+  return http.post('*/api/auth/logout', async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+  if (typeof overrideResponse === 'function') {await overrideResponse(info); }
+
+    return new HttpResponse(null,
+      { status: 204
       })
   }, options)
 }
@@ -1455,6 +1627,18 @@ export const getDeleteNoteMockHandler = (overrideResponse?: void | ((info: Param
   }, options)
 }
 
+export const getListNoteRevisionsMockHandler = (overrideResponse?: NoteRevision[] | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<NoteRevision[]> | NoteRevision[]), options?: RequestHandlerOptions) => {
+  return http.get('*/api/v1/notes/:id/revisions', async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+
+
+    return HttpResponse.json(overrideResponse !== undefined
+    ? (typeof overrideResponse === "function" ? await overrideResponse(info) : overrideResponse)
+    : getListNoteRevisionsResponseMock(),
+      { status: 200
+      })
+  }, options)
+}
+
 export const getListFoldersMockHandler = (overrideResponse?: FolderList | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<FolderList> | FolderList), options?: RequestHandlerOptions) => {
   return http.get('*/api/v1/folders', async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
 
@@ -1516,6 +1700,7 @@ export const getBoarditAPIMock = () => [
   getAuthRegisterMockHandler(),
   getAuthLoginMockHandler(),
   getAuthRefreshMockHandler(),
+  getAuthLogoutMockHandler(),
   getGetCurrentUserMockHandler(),
   getListPublicNotesMockHandler(),
   getGetPublicNoteMockHandler(),
@@ -1524,6 +1709,7 @@ export const getBoarditAPIMock = () => [
   getGetNoteMockHandler(),
   getUpdateNoteMockHandler(),
   getDeleteNoteMockHandler(),
+  getListNoteRevisionsMockHandler(),
   getListFoldersMockHandler(),
   getCreateFolderMockHandler(),
   getUpdateFolderMockHandler(),

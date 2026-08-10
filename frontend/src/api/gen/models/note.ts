@@ -26,6 +26,8 @@ export interface Note {
   is_published: boolean;
   visibility: NoteVisibility;
   sort_order: number;
+  /** @minimum 1 */
+  version: number;
   created_at: string;
   updated_at: string;
 }

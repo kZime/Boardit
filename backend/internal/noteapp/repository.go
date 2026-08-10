@@ -16,8 +16,12 @@ type Repository interface {
 	FindNote(context.Context, uint, uint) (model.Note, error)
 	CreateNote(context.Context, *model.Note) error
 	SaveNote(context.Context, *model.Note) error
+	SaveNoteIfVersion(context.Context, *model.Note, uint64) (bool, error)
 	DeleteNote(context.Context, *model.Note) error
 	SlugExists(context.Context, uint, string, *uint) (bool, error)
+	CreateNoteRevision(context.Context, *model.NoteRevision) error
+	ListNoteRevisions(context.Context, uint, uint) ([]model.NoteRevision, error)
+	CreateOutboxEvent(context.Context, *model.OutboxEvent) error
 
 	ListFolders(context.Context, uint) ([]model.Folder, error)
 	FindFolder(context.Context, uint, uint) (model.Folder, error)
@@ -89,8 +93,31 @@ func (repository *GormRepository) SaveNote(ctx context.Context, note *model.Note
 	return repository.db.WithContext(ctx).Save(note).Error
 }
 
+func (repository *GormRepository) SaveNoteIfVersion(ctx context.Context, note *model.Note, expectedVersion uint64) (bool, error) {
+	result := repository.db.WithContext(ctx).Model(&model.Note{}).
+		Where("id = ? AND user_id = ? AND version = ?", note.ID, note.UserID, expectedVersion).
+		Select("*").Omit("id").Updates(note)
+	return result.RowsAffected == 1, result.Error
+}
+
 func (repository *GormRepository) DeleteNote(ctx context.Context, note *model.Note) error {
 	return repository.db.WithContext(ctx).Delete(note).Error
+}
+
+func (repository *GormRepository) CreateNoteRevision(ctx context.Context, revision *model.NoteRevision) error {
+	return repository.db.WithContext(ctx).Create(revision).Error
+}
+
+func (repository *GormRepository) ListNoteRevisions(ctx context.Context, userID, noteID uint) ([]model.NoteRevision, error) {
+	var revisions []model.NoteRevision
+	err := repository.db.WithContext(ctx).
+		Where("user_id = ? AND note_id = ?", userID, noteID).
+		Order("version DESC").Find(&revisions).Error
+	return revisions, err
+}
+
+func (repository *GormRepository) CreateOutboxEvent(ctx context.Context, event *model.OutboxEvent) error {
+	return repository.db.WithContext(ctx).Create(event).Error
 }
 
 func (repository *GormRepository) SlugExists(ctx context.Context, userID uint, slug string, excludeNoteID *uint) (bool, error) {

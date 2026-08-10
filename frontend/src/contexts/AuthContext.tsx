@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import api from '../api/axios';
-import { clearTokens, getAccessToken, setTokens } from '../auth/tokenStorage';
+import { clearTokens, getAccessToken, getRefreshToken, setTokens } from '../auth/tokenStorage';
 import { jwtDecode } from 'jwt-decode';
 
 interface AuthContextType {
@@ -29,8 +29,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
+    const refreshToken = getRefreshToken();
     clearTokens();
     setToken(null);
+    if (refreshToken) {
+      void api.post('/api/auth/logout', { refresh_token: refreshToken }).catch(() => undefined);
+    }
     // SPA: PrivateRoute will redirect to /login when token is null
   };
 

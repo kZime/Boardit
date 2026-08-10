@@ -10,6 +10,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './authLogoutBody';
 export * from './authRefreshBody';
 export * from './authTokens';
 export * from './createFolderRequest';
@@ -25,6 +26,7 @@ export * from './listPublicNotesParams';
 export * from './loginRequest';
 export * from './note';
 export * from './noteRevision';
+export * from './noteRevisionSource';
 export * from './notesPage';
 export * from './noteVisibility';
 export * from './publicNote';

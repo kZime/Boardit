@@ -69,6 +69,23 @@ func (handler *ContentHandler) GetNote(c *gin.Context) {
 	c.JSON(http.StatusOK, note)
 }
 
+func (handler *ContentHandler) ListNoteRevisions(c *gin.Context) {
+	noteID, ok := pathID(c, "note")
+	if !ok {
+		return
+	}
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	revisions, err := handler.service.ListNoteRevisions(c.Request.Context(), userID, noteID)
+	if err != nil {
+		writeUseCaseError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, revisions)
+}
+
 func (handler *ContentHandler) UpdateNote(c *gin.Context) {
 	noteID, ok := pathID(c, "note")
 	if !ok {

@@ -49,6 +49,7 @@ func (suite *NoteHandlerTestSuite) SetupSuite() {
 	suite.router.GET("/api/v1/notes", content.ListNotes)
 	suite.router.POST("/api/v1/notes", content.CreateNote)
 	suite.router.GET("/api/v1/notes/:id", content.GetNote)
+	suite.router.GET("/api/v1/notes/:id/revisions", content.ListNoteRevisions)
 	suite.router.PATCH("/api/v1/notes/:id", content.UpdateNote)
 	suite.router.DELETE("/api/v1/notes/:id", content.DeleteNote)
 	suite.router.GET("/api/v1/folders", content.ListFolders)
@@ -149,6 +150,18 @@ func (suite *NoteHandlerTestSuite) TestPrivateResourcesAreIsolatedByUser() {
 	suite.Equal(http.StatusNotFound, suite.request(http.MethodGet, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user2.ID, nil).Code)
 	otherUserList := suite.decodeObject(suite.request(http.MethodGet, "/api/v1/notes", suite.user2.ID, nil))
 	suite.Equal(float64(0), otherUserList["total"])
+	otherUserSearch := suite.decodeObject(suite.request(http.MethodGet, "/api/v1/notes?q=secret", suite.user2.ID, nil))
+	suite.Equal(float64(0), otherUserSearch["total"])
+
+	ownerRevisions := suite.request(http.MethodGet, fmt.Sprintf("/api/v1/notes/%d/revisions", noteID), suite.user1.ID, nil)
+	suite.Equal(http.StatusOK, ownerRevisions.Code)
+	var revisions []map[string]any
+	suite.Require().NoError(json.Unmarshal(ownerRevisions.Body.Bytes(), &revisions))
+	suite.Len(revisions, 1)
+	suite.Equal(float64(1), revisions[0]["version"])
+	suite.Equal(http.StatusNotFound, suite.request(
+		http.MethodGet, fmt.Sprintf("/api/v1/notes/%d/revisions", noteID), suite.user2.ID, nil,
+	).Code)
 }
 
 func (suite *NoteHandlerTestSuite) TestListNotesClampsNegativeOffset() {
