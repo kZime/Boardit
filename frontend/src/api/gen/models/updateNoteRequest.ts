@@ -21,10 +21,10 @@ export interface UpdateNoteRequest {
   is_published?: boolean;
   visibility?: UpdateNoteRequestVisibility;
   /**
-     * Preferred optimistic concurrency token from the last Note response
+     * Required optimistic concurrency token from the last Note response
      * @minimum 1
      */
-  version?: number;
-  /** When supplied, enforces optimistic concurrency against the last response version */
+  version: number;
+  /** When supplied, enforces an additional compatibility check against the last response timestamp */
   updated_at?: string;
 }

@@ -3,6 +3,7 @@ import { useListNotes, useUpdateNote } from '../api/gen/client'
 export default function DebugNotes() {
   const { data, isLoading } = useListNotes({ limit: 10, offset: 0 })
   const update = useUpdateNote()
+  const firstNote = data?.data.items[0]
 
   if (isLoading) return <div>Loading…</div>
   return (
@@ -10,11 +11,12 @@ export default function DebugNotes() {
       <pre>{JSON.stringify(data, null, 2)}</pre>
       <button
         onClick={() =>
-          update.mutate({
-            id: 1,
-            data: { content_md: '# hi', updated_at: new Date().toISOString() },
+          firstNote && update.mutate({
+            id: firstNote.id,
+            data: { content_md: '# hi', version: firstNote.version },
           })
         }
+        disabled={!firstNote}
       >
         Patch one note
       </button>

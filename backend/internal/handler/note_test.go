@@ -121,7 +121,7 @@ func (suite *NoteHandlerTestSuite) TestNoteAndFolderLifecycle() {
 	suite.Equal("# First draft", suite.decodeObject(getResponse)["content_md"])
 
 	updateResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
-		"title": "AI roadmap updated", "content_md": "# Second draft",
+		"title": "AI roadmap updated", "content_md": "# Second draft", "version": created["version"],
 	})
 	suite.Equal(http.StatusOK, updateResponse.Code)
 	suite.Equal("ai-roadmap-updated", suite.decodeObject(updateResponse)["slug"])
@@ -178,18 +178,36 @@ func (suite *NoteHandlerTestSuite) TestUpdatedAtCanBeRoundTrippedForOptimisticCo
 	suite.Equal(http.StatusCreated, createResponse.Code)
 	created := suite.decodeObject(createResponse)
 	noteID := uint(created["id"].(float64))
-	version := created["updated_at"].(string)
+	updatedAt := created["updated_at"].(string)
+	version := created["version"]
 
 	updateResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
-		"content_md": "v2", "updated_at": version,
+		"content_md": "v2", "updated_at": updatedAt, "version": version,
 	})
 	suite.Equal(http.StatusOK, updateResponse.Code)
-	suite.NotEqual(version, suite.decodeObject(updateResponse)["updated_at"])
+	suite.NotEqual(updatedAt, suite.decodeObject(updateResponse)["updated_at"])
 
 	conflictResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
-		"content_md": "stale write", "updated_at": version,
+		"content_md": "stale write", "updated_at": updatedAt, "version": version,
 	})
 	suite.Equal(http.StatusConflict, conflictResponse.Code)
+}
+
+func (suite *NoteHandlerTestSuite) TestUpdateRequiresVersion() {
+	createResponse := suite.request(http.MethodPost, "/api/v1/notes", suite.user1.ID, map[string]any{
+		"title": "Protected",
+	})
+	noteID := uint(suite.decodeObject(createResponse)["id"].(float64))
+
+	response := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
+		"title": "Missing version",
+	})
+	suite.Equal(http.StatusBadRequest, response.Code)
+
+	response = suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
+		"title": "Invalid version", "version": 0,
+	})
+	suite.Equal(http.StatusBadRequest, response.Code)
 }
 
 func (suite *NoteHandlerTestSuite) TestFolderAssignmentsRequireOwnershipAndAllowMovingToRoot() {
@@ -203,15 +221,17 @@ func (suite *NoteHandlerTestSuite) TestFolderAssignmentsRequireOwnershipAndAllow
 		"title": "Move me", "folder_id": ownFolder.ID,
 	})
 	suite.Equal(http.StatusCreated, createResponse.Code)
-	noteID := uint(suite.decodeObject(createResponse)["id"].(float64))
+	created := suite.decodeObject(createResponse)
+	noteID := uint(created["id"].(float64))
+	version := created["version"]
 
 	foreignResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
-		"folder_id": foreignFolder.ID,
+		"folder_id": foreignFolder.ID, "version": version,
 	})
 	suite.Equal(http.StatusBadRequest, foreignResponse.Code)
 
 	rootResponse := suite.request(http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", noteID), suite.user1.ID, map[string]any{
-		"folder_id": nil,
+		"folder_id": nil, "version": version,
 	})
 	suite.Equal(http.StatusOK, rootResponse.Code)
 	var note model.Note

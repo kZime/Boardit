@@ -80,7 +80,7 @@ type UpdateNoteInput struct {
 	ContentMD   *string      `json:"content_md"`
 	IsPublished *bool        `json:"is_published"`
 	Visibility  *string      `json:"visibility"`
-	Version     *uint64      `json:"version"`
+	Version     *uint64      `json:"version" binding:"required,min=1"`
 	UpdatedAt   string       `json:"updated_at"`
 }
 

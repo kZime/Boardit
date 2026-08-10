@@ -198,7 +198,7 @@ Revisions are immutable accepted snapshots. `GET /api/v1/notes/{id}/revisions` r
 ### 3.3 Update Note (Autosave & Optimistic Concurrency)
 
 * **PATCH** `/api/v1/notes/{id}`
-* **Body** (Some fields are optional; include `version` for optimistic concurrency. `updated_at` remains supported for compatibility.)
+* **Body** (`version` is required; other fields are optional. `updated_at` remains supported as an additional compatibility check.)
 
   ```json
   {
@@ -216,7 +216,7 @@ Revisions are immutable accepted snapshots. `GET /api/v1/notes/{id}/revisions` r
   * If `content_md` changes: Server renders to `content_html` and performs **XSS cleaning** (strict whitelist).
   * Record a `note_revisions` (diff can be empty for now).
   * **Autosave Idempotent**：If content hasn't changed, return 200 directly, `updated_at` remains unchanged.
-  * **Concurrency Conflict**：Client-provided `version` or `updated_at` doesn't match server → `409 VERSION_CONFLICT`.
+  * **Concurrency Conflict**：Client-provided `version` or optional `updated_at` doesn't match server → `409 VERSION_CONFLICT`.
 * **200**：Return updated `NoteDTO`
 * **409** (Version Conflict)
 
@@ -347,7 +347,7 @@ Revisions are immutable accepted snapshots. `GET /api/v1/notes/{id}/revisions` r
 
 ## 7) Concurrency & Autosave (Frontend Must Read)
 
-* When calling `PATCH /notes/{id}`, please include the current note's `updated_at` field for **optimistic concurrency control**.
+* When calling `PATCH /notes/{id}`, include the current note's required `version` field for **optimistic concurrency control**. `updated_at` is optional compatibility metadata.
 * **Autosave Suggestions**：Frontend should use **throttling** (~1200ms) for input saving and **debouncing** (~500ms) after drag-and-drop sorting.
 * **Conflict Handling**：When receiving `409 VERSION_CONFLICT`, UI should prompt "Server has updated", and allow showing server snapshot and allowing overwrite/merge.
 
@@ -364,7 +364,7 @@ Revisions are immutable accepted snapshots. `GET /api/v1/notes/{id}/revisions` r
 |  401 | UNAUTHORIZED      | Unauthorized or invalid token           |
 |  403 | FORBIDDEN         | Illegal access to other user's resources                |
 |  404 | NOT\_FOUND        | Resource not found                   |
-|  409 | VERSION\_CONFLICT | Optimistic lock conflict (`updated_at` mismatch) |
+|  409 | VERSION\_CONFLICT | Optimistic lock conflict (`version` mismatch) |
 |  429 | RATE\_LIMITED     | Rate limit (if enabled)               |
 |  500 | INTERNAL          | Server internal error                 |
 
@@ -388,7 +388,7 @@ Revisions are immutable accepted snapshots. `GET /api/v1/notes/{id}/revisions` r
 ## 11) Appendix: Quick Checklist for Frontend
 
 * All protected requests: Include `Authorization: Bearer <access_token>`
-* `PATCH /notes/{id}`: Include `updated_at`; handle 409 popup
+* `PATCH /notes/{id}`: Include `version`; preserve the local draft and handle the 409 conflict UI
 * Preview area: Use returned `content_html` (cleaned)
 * Refresh/relogin recovery: Record `lastNoteId` (local or backend preference storage)
 * Drag-and-drop sorting: Aggregate and call `/tree/reorder` once

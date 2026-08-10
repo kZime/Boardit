@@ -134,7 +134,13 @@ export const updateNoteHandler = http.patch('*/api/v1/notes/:id', async ({ param
 
   const patch = (await request.json()) as UpdateNoteRequest
   const prev = notesDb[idx]
-  if (patch.version !== undefined && patch.version !== prev.version) {
+  if (!Number.isInteger(patch.version) || patch.version < 1) {
+    return HttpResponse.json({
+      error: 'VALIDATION_ERROR',
+      message: 'version is required and must be at least 1',
+    }, { status: 400 })
+  }
+  if (patch.version !== prev.version) {
     return HttpResponse.json({
       error: 'VERSION_CONFLICT',
       message: 'note has been modified by another client',
@@ -145,7 +151,8 @@ export const updateNoteHandler = http.patch('*/api/v1/notes/:id', async ({ param
   const updated: Note = {
     ...prev,
     title: patch.title ?? prev.title,
-    folder_id: patch.folder_id ?? prev.folder_id,
+    folder_id: 'folder_id' in patch ? patch.folder_id : prev.folder_id,
+    cover_url: 'cover_url' in patch ? patch.cover_url : prev.cover_url,
     content_md: patch.content_md ?? prev.content_md,
     content_html: patch.content_md ?? prev.content_html,
     is_published: patch.is_published ?? prev.is_published,

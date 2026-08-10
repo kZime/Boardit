@@ -209,6 +209,9 @@ func (service *Service) UpdateNote(ctx context.Context, userID, noteID uint, inp
 }
 
 func (service *Service) updateNoteInTransaction(ctx context.Context, userID, noteID uint, input UpdateNoteInput) (Note, error) {
+	if input.Version == nil || *input.Version == 0 {
+		return Note{}, invalid("version is required")
+	}
 	note, err := service.repository.FindNote(ctx, userID, noteID)
 	if errors.Is(err, ErrRepositoryNotFound) {
 		return Note{}, notFound("note not found")
@@ -216,7 +219,7 @@ func (service *Service) updateNoteInTransaction(ctx context.Context, userID, not
 	if err != nil {
 		return Note{}, internal("failed to get note", err)
 	}
-	if input.Version != nil && note.Version != *input.Version {
+	if note.Version != *input.Version {
 		return Note{}, &ConflictError{
 			ServerUpdatedAt: formatTimestamp(note.UpdatedAt),
 			ServerSnapshot:  toNoteDTO(note),

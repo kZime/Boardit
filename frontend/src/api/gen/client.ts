@@ -886,7 +886,7 @@ export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError =
  */
 export const updateNote = (
     id: number,
-    updateNoteRequest?: UpdateNoteRequest,
+    updateNoteRequest: UpdateNoteRequest,
  signal?: AbortSignal
 ) => {
 
@@ -903,8 +903,8 @@ export const updateNote = (
 
 
 export const getUpdateNoteMutationOptions = <TError = Error | VersionConflictError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data: UpdateNoteRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data: UpdateNoteRequest}, TContext> => {
 
 const mutationKey = ['updateNote'];
 const {mutation: mutationOptions} = options ?
@@ -916,7 +916,7 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateNote>>, {id: number;data?: UpdateNoteRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateNote>>, {id: number;data: UpdateNoteRequest}> = (props) => {
           const {id,data} = props ?? {};
 
           return  updateNote(id,data,)
@@ -930,18 +930,18 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UpdateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof updateNote>>>
-    export type UpdateNoteMutationBody = UpdateNoteRequest | undefined
+    export type UpdateNoteMutationBody = UpdateNoteRequest
     export type UpdateNoteMutationError = Error | VersionConflictError
 
     /**
  * @summary Update note (autosave & optimistic concurrency)
  */
 export const useUpdateNote = <TError = Error | VersionConflictError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext>, }
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data: UpdateNoteRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateNote>>,
         TError,
-        {id: number;data?: UpdateNoteRequest},
+        {id: number;data: UpdateNoteRequest},
         TContext
       > => {
       return useMutation(getUpdateNoteMutationOptions(options), queryClient);

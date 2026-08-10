@@ -8,6 +8,7 @@ export default function DebugDock() {
     { query: { enabled: open } }
   )
   const update = useUpdateNote()
+  const firstNote = data?.data.items[0]
 
   if (!import.meta.env.DEV) return null
 
@@ -52,13 +53,15 @@ export default function DebugDock() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             <button
               onClick={() => {
+                if (!firstNote) return
                 update.mutate({
-                  id: 1, // TODO: use current selected noteId
-                  data: { content_md: '# hi', updated_at: new Date().toISOString() }
+                  id: firstNote.id,
+                  data: { content_md: '# hi', version: firstNote.version },
                 })
               }}
+              disabled={!firstNote}
             >
-              PATCH /notes/1
+              PATCH first note
             </button>
 
             <button onClick={() => window.location.reload()}>Reload</button>

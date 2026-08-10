@@ -36,8 +36,9 @@ func TestServiceCreatesVersionedRevisionsAndOutboxEvents(t *testing.T) {
 	require.Equal(t, uint64(1), created.Version)
 
 	content := "v2"
+	createdVersion := created.Version
 	updated, err := service.UpdateNote(ctx, owner.ID, created.ID, UpdateNoteInput{
-		ContentMD: &content, UpdatedAt: created.UpdatedAt,
+		ContentMD: &content, Version: &createdVersion, UpdatedAt: created.UpdatedAt,
 	})
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), updated.Version)
@@ -69,8 +70,9 @@ func TestRevisionFailureRollsBackNoteUpdate(t *testing.T) {
 		BEGIN SELECT RAISE(FAIL, 'revision rejected'); END`).Error)
 
 	content := "must roll back"
+	createdVersion := created.Version
 	_, err = service.UpdateNote(ctx, owner.ID, created.ID, UpdateNoteInput{
-		ContentMD: &content, UpdatedAt: created.UpdatedAt,
+		ContentMD: &content, Version: &createdVersion, UpdatedAt: created.UpdatedAt,
 	})
 	require.Error(t, err)
 
@@ -78,6 +80,18 @@ func TestRevisionFailureRollsBackNoteUpdate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "v1", stored.ContentMD)
 	require.Equal(t, uint64(1), stored.Version)
+}
+
+func TestServiceRejectsUpdateWithoutVersion(t *testing.T) {
+	service, _, owner, _ := newTestService(t)
+	created, err := service.CreateNote(context.Background(), owner.ID, CreateNoteInput{Title: "Version required"})
+	require.NoError(t, err)
+	title := "unsafe update"
+
+	_, err = service.UpdateNote(context.Background(), owner.ID, created.ID, UpdateNoteInput{Title: &title})
+	var useCaseErr *UseCaseError
+	require.True(t, errors.As(err, &useCaseErr))
+	require.Equal(t, ErrorInvalid, useCaseErr.Kind)
 }
 
 func TestServiceUpdatesNoteWithoutGin(t *testing.T) {
@@ -126,8 +140,9 @@ func TestServicePublishesUnlistedNoteWithoutGin(t *testing.T) {
 	require.NoError(t, err)
 	visibility := "unlisted"
 	published := true
+	createdVersion := created.Version
 	_, err = service.UpdateNote(ctx, owner.ID, created.ID, UpdateNoteInput{
-		Visibility: &visibility, IsPublished: &published, UpdatedAt: created.UpdatedAt,
+		Visibility: &visibility, IsPublished: &published, Version: &createdVersion, UpdatedAt: created.UpdatedAt,
 	})
 	require.NoError(t, err)
 

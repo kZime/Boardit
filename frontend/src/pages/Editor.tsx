@@ -36,7 +36,15 @@ import PostHeaderCard from "../components/PostHeaderCard";
 import DeleteNoteDialog from "../features/editor/DeleteNoteDialog";
 import MetadataModal from "../features/editor/MetadataModal";
 import NoteTreeSidebar from "../features/editor/NoteTreeSidebar";
-import { isDirty, saveExistingNote } from "../features/editor/saveCoordinator";
+import SaveConflictDialog from "../features/editor/SaveConflictDialog";
+import {
+  getVersionConflict,
+  isDirty,
+  saveExistingNote,
+  snapshotOf,
+  type SavedSnapshot,
+  versionForMove,
+} from "../features/editor/saveCoordinator";
 
 // Orval generated hooks
 import {
@@ -49,6 +57,7 @@ import {
 import { useAllNotes } from "../features/editor/useAllNotes";
 import type { Note } from "../api/gen/models/note";
 import type { CreateNoteRequest } from "../api/gen/models/createNoteRequest";
+import type { VersionConflictError } from "../api/gen/models/versionConflictError";
 
 export default function Editor() {
   const navigate = useNavigate();
@@ -91,6 +100,7 @@ export default function Editor() {
 
   // Save success notification state
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [saveConflict, setSaveConflict] = useState<VersionConflictError | null>(null);
 
   // Delete confirmation modal: note to delete or null
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
@@ -99,11 +109,12 @@ export default function Editor() {
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
 
   // Last saved snapshot for dirty check (refs so beforeunload can read)
-  const lastSavedRef = useRef<{
-    md: string;
-    title: string;
-    visibility: "private" | "public" | "unlisted";
-  }>({ md: defaultMd, title: defaultTitle, visibility: "private" });
+  const lastSavedRef = useRef<SavedSnapshot>({
+    md: defaultMd,
+    title: defaultTitle,
+    coverUrl: "",
+    visibility: "private",
+  });
   const isDirtyRef = useRef(false);
   useEffect(() => {
     if (!currentNoteId) {
@@ -140,14 +151,15 @@ export default function Editor() {
       setCurrentNoteId(note.id);
       setCurrentVersion(note.version);
       setMd(note.content_md || "");
-      setPageDetails({
+      const details = {
         title,
         coverUrl: note.cover_url || "",
         description: "",
         tags: "",
         visibility: vis,
-      });
-      lastSavedRef.current = { md: note.content_md || "", title, visibility: vis };
+      };
+      setPageDetails(details);
+      lastSavedRef.current = snapshotOf(note.content_md || "", details);
     }
   }, [noteIdFromUrl, isLoading, items]);
 
@@ -209,14 +221,16 @@ export default function Editor() {
         setCurrentNoteId(result.data.id);
         setCurrentVersion(result.data.version);
         setMd(result.data.content_md || "");
-        setPageDetails({
+        const details = {
           title,
           coverUrl: "",
           description: "",
           tags: "",
           visibility: vis,
-        });
-        lastSavedRef.current = { md: result.data.content_md || "", title, visibility: vis };
+        };
+        setPageDetails(details);
+        lastSavedRef.current = snapshotOf(result.data.content_md || "", details);
+        setSaveConflict(null);
         refetchNotes(); // Refresh the notes list
       }
     } catch (error) {
@@ -238,6 +252,7 @@ export default function Editor() {
           tags: "",
           visibility: "private",
         });
+        setSaveConflict(null);
       }
       refetchNotes();
       setNoteToDelete(null);
@@ -246,7 +261,7 @@ export default function Editor() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (versionOverride?: number) => {
     if (!currentNoteId || currentVersion === null) {
       // Create new note if no current note
       await handleNew();
@@ -263,12 +278,13 @@ export default function Editor() {
         noteID: currentNoteId,
         markdown: md,
         details: pageDetails,
-        version: currentVersion,
+        version: versionOverride ?? currentVersion,
       });
       refetchNotes(); // Refresh the notes list
       lastSavedRef.current = saved.snapshot;
       setCurrentVersion(saved.version);
       isDirtyRef.current = false;
+      setSaveConflict(null);
 
       // Show success notification
       setShowSaveSuccess(true);
@@ -277,6 +293,11 @@ export default function Editor() {
       }, 3000); // Hide after 3 seconds
       return true;
     } catch (error) {
+      const conflict = getVersionConflict(error);
+      if (conflict) {
+        setSaveConflict(conflict);
+        return false;
+      }
       console.error("Failed to save note:", error);
       return false;
     }
@@ -291,14 +312,16 @@ export default function Editor() {
     setCurrentNoteId(note.id);
     setCurrentVersion(note.version);
     setMd(note.content_md || "");
-    setPageDetails({
+    const details = {
       title,
       coverUrl: note.cover_url || "",
       description: "",
       tags: "",
       visibility: vis,
-    });
-    lastSavedRef.current = { md: note.content_md || "", title, visibility: vis };
+    };
+    setPageDetails(details);
+    lastSavedRef.current = snapshotOf(note.content_md || "", details);
+    setSaveConflict(null);
 
     // Force MDXEditor to update its content
     setTimeout(() => {
@@ -321,9 +344,10 @@ export default function Editor() {
   const handleMoveNote = async (noteId: number, folderId: number | null) => {
     try {
       const target = items.find((note) => note.id === noteId);
+      const version = versionForMove(noteId, currentNoteId, currentVersion, target?.version);
       const response = await updateNoteMutation.mutateAsync({
         id: noteId,
-        data: { folder_id: folderId, version: target?.version },
+        data: { folder_id: folderId, version },
       });
       if (noteId === currentNoteId) setCurrentVersion(response.data.version);
       refetchNotes();
@@ -355,6 +379,32 @@ export default function Editor() {
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handleLoadServerVersion = () => {
+    if (!saveConflict) return;
+    const note = saveConflict.server_snapshot;
+    const details = {
+      title: note.title || "Untitled",
+      coverUrl: note.cover_url || "",
+      description: "",
+      tags: "",
+      visibility: note.visibility,
+    };
+    setCurrentVersion(note.version);
+    setMd(note.content_md || "");
+    setPageDetails(details);
+    lastSavedRef.current = snapshotOf(note.content_md || "", details);
+    isDirtyRef.current = false;
+    editorRef.current?.setMarkdown(note.content_md || "");
+    setSaveConflict(null);
+    setShowEditModal(false);
+    void refetchNotes();
+  };
+
+  const handleOverwriteConflict = async () => {
+    if (!saveConflict) return;
+    await handleSave(saveConflict.server_snapshot.version);
   };
 
   return (
@@ -523,7 +573,7 @@ export default function Editor() {
                     </button>
                     <button
                       className="px-4 py-2 rounded-lg bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={handleSave}
+                      onClick={() => void handleSave()}
                       disabled={
                         updateNoteMutation.isPending || createNoteMutation.isPending
                       }
@@ -646,6 +696,20 @@ export default function Editor() {
           isDeleting={deleteNoteMutation.isPending}
           onCancel={() => setNoteToDelete(null)}
           onConfirm={(noteID) => void handleDelete(noteID)}
+        />
+      )}
+
+      {saveConflict && (
+        <SaveConflictDialog
+          serverNote={saveConflict.server_snapshot}
+          localTitle={pageDetails.title}
+          localMarkdown={md}
+          localCoverUrl={pageDetails.coverUrl}
+          localVisibility={pageDetails.visibility}
+          isSaving={updateNoteMutation.isPending}
+          onKeepEditing={() => setSaveConflict(null)}
+          onLoadServer={handleLoadServerVersion}
+          onOverwrite={() => void handleOverwriteConflict()}
         />
       )}
     </div>

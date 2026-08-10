@@ -357,7 +357,7 @@ paths:
           required: true
           schema: { type: integer, format: int64 }
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
@@ -368,7 +368,7 @@ paths:
               content_md: "# Edited ..."
               is_published: false
               visibility: private
-              updated_at: "2025-08-13T21:31:12Z"
+              version: 3
       responses:
         "200":
           description: Updated
@@ -376,8 +376,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Note"
+        "400":
+          description: Missing or invalid required version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
-          description: Version conflict (`updated_at` mismatch)
+          description: Version conflict (`version` mismatch)
           content:
             application/json:
               schema:
@@ -717,6 +723,7 @@ components:
 
     UpdateNoteRequest:
       type: object
+      required: [version]
       properties:
         title: { type: string }
         folder_id: { type: integer, format: int64, nullable: true }
@@ -730,12 +737,12 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: "Preferred optimistic concurrency token from the last Note response"
+          description: "Required optimistic concurrency token from the last Note response"
         updated_at:
           {
             type: string,
             format: date-time,
-            description: "When supplied, enforces optimistic concurrency against the last response version",
+            description: "When supplied, enforces an additional compatibility check against the last response timestamp",
           }
 
     NotesPage:
