@@ -28,13 +28,6 @@ import type {
   UseQueryResult
 } from '@tanstack/react-query';
 
-import * as axios from 'axios';
-import type {
-  AxiosError,
-  AxiosRequestConfig,
-  AxiosResponse
-} from 'axios';
-
 import type {
   AuthRefreshBody,
   AuthTokens,
@@ -71,6 +64,7 @@ import type {
   RequestHandlerOptions
 } from 'msw';
 
+import { orvalRequester } from '../orval-axios';
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
   const result = { queryKey } as T & { queryKey: K };
   for (const key of Object.keys(query)) {
@@ -90,29 +84,32 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
  * @summary Register a new user
  */
 export const authRegister = (
-    registerRequest: RegisterRequest, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<User>> => {
+    registerRequest: RegisterRequest,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.post(
-      `/api/auth/register`,
-      registerRequest,options
-    );
-  }
+      return orvalRequester<User>(
+      {url: `/api/auth/register`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: registerRequest, signal
+    },
+      );
+    }
 
 
 
 
-export const getAuthRegisterMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRegister>>, TError,{data: RegisterRequest}, TContext>, axios?: AxiosRequestConfig}
+export const getAuthRegisterMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRegister>>, TError,{data: RegisterRequest}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof authRegister>>, TError,{data: RegisterRequest}, TContext> => {
 
 const mutationKey = ['authRegister'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -120,7 +117,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof authRegister>>, {data: RegisterRequest}> = (props) => {
           const {data} = props ?? {};
 
-          return  authRegister(data,axiosOptions)
+          return  authRegister(data,)
         }
 
 
@@ -132,13 +129,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type AuthRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof authRegister>>>
     export type AuthRegisterMutationBody = RegisterRequest
-    export type AuthRegisterMutationError = AxiosError<Error>
+    export type AuthRegisterMutationError = Error
 
     /**
  * @summary Register a new user
  */
-export const useAuthRegister = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRegister>>, TError,{data: RegisterRequest}, TContext>, axios?: AxiosRequestConfig}
+export const useAuthRegister = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRegister>>, TError,{data: RegisterRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof authRegister>>,
         TError,
@@ -152,29 +149,32 @@ export const useAuthRegister = <TError = AxiosError<Error>,
  * @summary Login
  */
 export const authLogin = (
-    loginRequest: LoginRequest, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<AuthTokens>> => {
+    loginRequest: LoginRequest,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.post(
-      `/api/auth/login`,
-      loginRequest,options
-    );
-  }
+      return orvalRequester<AuthTokens>(
+      {url: `/api/auth/login`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: loginRequest, signal
+    },
+      );
+    }
 
 
 
 
-export const getAuthLoginMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogin>>, TError,{data: LoginRequest}, TContext>, axios?: AxiosRequestConfig}
+export const getAuthLoginMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogin>>, TError,{data: LoginRequest}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof authLogin>>, TError,{data: LoginRequest}, TContext> => {
 
 const mutationKey = ['authLogin'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -182,7 +182,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof authLogin>>, {data: LoginRequest}> = (props) => {
           const {data} = props ?? {};
 
-          return  authLogin(data,axiosOptions)
+          return  authLogin(data,)
         }
 
 
@@ -194,13 +194,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type AuthLoginMutationResult = NonNullable<Awaited<ReturnType<typeof authLogin>>>
     export type AuthLoginMutationBody = LoginRequest
-    export type AuthLoginMutationError = AxiosError<Error>
+    export type AuthLoginMutationError = Error
 
     /**
  * @summary Login
  */
-export const useAuthLogin = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogin>>, TError,{data: LoginRequest}, TContext>, axios?: AxiosRequestConfig}
+export const useAuthLogin = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogin>>, TError,{data: LoginRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof authLogin>>,
         TError,
@@ -214,29 +214,32 @@ export const useAuthLogin = <TError = AxiosError<Error>,
  * @summary Refresh tokens
  */
 export const authRefresh = (
-    authRefreshBody: AuthRefreshBody, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<AuthTokens>> => {
+    authRefreshBody: AuthRefreshBody,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.post(
-      `/api/auth/refresh`,
-      authRefreshBody,options
-    );
-  }
+      return orvalRequester<AuthTokens>(
+      {url: `/api/auth/refresh`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: authRefreshBody, signal
+    },
+      );
+    }
 
 
 
 
-export const getAuthRefreshMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data: AuthRefreshBody}, TContext>, axios?: AxiosRequestConfig}
+export const getAuthRefreshMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data: AuthRefreshBody}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data: AuthRefreshBody}, TContext> => {
 
 const mutationKey = ['authRefresh'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -244,7 +247,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof authRefresh>>, {data: AuthRefreshBody}> = (props) => {
           const {data} = props ?? {};
 
-          return  authRefresh(data,axiosOptions)
+          return  authRefresh(data,)
         }
 
 
@@ -256,13 +259,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type AuthRefreshMutationResult = NonNullable<Awaited<ReturnType<typeof authRefresh>>>
     export type AuthRefreshMutationBody = AuthRefreshBody
-    export type AuthRefreshMutationError = AxiosError<Error>
+    export type AuthRefreshMutationError = Error
 
     /**
  * @summary Refresh tokens
  */
-export const useAuthRefresh = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data: AuthRefreshBody}, TContext>, axios?: AxiosRequestConfig}
+export const useAuthRefresh = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data: AuthRefreshBody}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof authRefresh>>,
         TError,
@@ -276,14 +279,16 @@ export const useAuthRefresh = <TError = AxiosError<Error>,
  * @summary Get current user
  */
 export const getCurrentUser = (
-     options?: AxiosRequestConfig
- ): Promise<AxiosResponse<User>> => {
+
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.get(
-      `/api/user`,options
-    );
-  }
+      return orvalRequester<User>(
+      {url: `/api/user`, method: 'GET', signal
+    },
+      );
+    }
 
 
 
@@ -295,16 +300,16 @@ export const getGetCurrentUserQueryKey = () => {
     }
 
 
-export const getGetCurrentUserQueryOptions = <TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = AxiosError<Error>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getGetCurrentUserQueryOptions = <TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = Error>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>>, }
 ) => {
 
-const {query: queryOptions, axios: axiosOptions} = options ?? {};
+const {query: queryOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetCurrentUserQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentUser>>> = ({ signal }) => getCurrentUser({ signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentUser>>> = ({ signal }) => getCurrentUser(signal);
 
 
 
@@ -314,39 +319,39 @@ const {query: queryOptions, axios: axiosOptions} = options ?? {};
 }
 
 export type GetCurrentUserQueryResult = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>
-export type GetCurrentUserQueryError = AxiosError<Error>
+export type GetCurrentUserQueryError = Error
 
 
-export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = AxiosError<Error>>(
+export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = Error>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getCurrentUser>>,
           TError,
           Awaited<ReturnType<typeof getCurrentUser>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = AxiosError<Error>>(
+export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = Error>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getCurrentUser>>,
           TError,
           Awaited<ReturnType<typeof getCurrentUser>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = AxiosError<Error>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = Error>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary Get current user
  */
 
-export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = AxiosError<Error>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUser>>, TError = Error>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentUser>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
@@ -367,16 +372,17 @@ export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUs
  * @summary List public notes (no auth)
  */
 export const listPublicNotes = (
-    params?: ListPublicNotesParams, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<PublicNotesPage>> => {
+    params?: ListPublicNotesParams,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.get(
-      `/api/v1/public/notes`,{
-    ...options,
-        params: {...params, ...options?.params},}
-    );
-  }
+      return orvalRequester<PublicNotesPage>(
+      {url: `/api/v1/public/notes`, method: 'GET',
+        params, signal
+    },
+      );
+    }
 
 
 
@@ -388,16 +394,16 @@ export const getListPublicNotesQueryKey = (params?: ListPublicNotesParams,) => {
     }
 
 
-export const getListPublicNotesQueryOptions = <TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = AxiosError<unknown>>(params?: ListPublicNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getListPublicNotesQueryOptions = <TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = unknown>(params?: ListPublicNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>>, }
 ) => {
 
-const {query: queryOptions, axios: axiosOptions} = options ?? {};
+const {query: queryOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getListPublicNotesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPublicNotes>>> = ({ signal }) => listPublicNotes(params, { signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPublicNotes>>> = ({ signal }) => listPublicNotes(params, signal);
 
 
 
@@ -407,39 +413,39 @@ const {query: queryOptions, axios: axiosOptions} = options ?? {};
 }
 
 export type ListPublicNotesQueryResult = NonNullable<Awaited<ReturnType<typeof listPublicNotes>>>
-export type ListPublicNotesQueryError = AxiosError<unknown>
+export type ListPublicNotesQueryError = unknown
 
 
-export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = AxiosError<unknown>>(
+export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = unknown>(
  params: undefined |  ListPublicNotesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listPublicNotes>>,
           TError,
           Awaited<ReturnType<typeof listPublicNotes>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = AxiosError<unknown>>(
+export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = unknown>(
  params?: ListPublicNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listPublicNotes>>,
           TError,
           Awaited<ReturnType<typeof listPublicNotes>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = AxiosError<unknown>>(
- params?: ListPublicNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = unknown>(
+ params?: ListPublicNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary List public notes (no auth)
  */
 
-export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = AxiosError<unknown>>(
- params?: ListPublicNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicNotes>>, TError = unknown>(
+ params?: ListPublicNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPublicNotes>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
@@ -461,14 +467,16 @@ export function useListPublicNotes<TData = Awaited<ReturnType<typeof listPublicN
  */
 export const getPublicNote = (
     username: string,
-    slug: string, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<PublicNote>> => {
+    slug: string,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.get(
-      `/api/v1/public/notes/${username}/${slug}`,options
-    );
-  }
+      return orvalRequester<PublicNote>(
+      {url: `/api/v1/public/notes/${username}/${slug}`, method: 'GET', signal
+    },
+      );
+    }
 
 
 
@@ -481,17 +489,17 @@ export const getGetPublicNoteQueryKey = (username: string,
     }
 
 
-export const getGetPublicNoteQueryOptions = <TData = Awaited<ReturnType<typeof getPublicNote>>, TError = AxiosError<Error>>(username: string,
-    slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getGetPublicNoteQueryOptions = <TData = Awaited<ReturnType<typeof getPublicNote>>, TError = Error>(username: string,
+    slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>>, }
 ) => {
 
-const {query: queryOptions, axios: axiosOptions} = options ?? {};
+const {query: queryOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetPublicNoteQueryKey(username,slug);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicNote>>> = ({ signal }) => getPublicNote(username,slug, { signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicNote>>> = ({ signal }) => getPublicNote(username,slug, signal);
 
 
 
@@ -501,10 +509,10 @@ const {query: queryOptions, axios: axiosOptions} = options ?? {};
 }
 
 export type GetPublicNoteQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicNote>>>
-export type GetPublicNoteQueryError = AxiosError<Error>
+export type GetPublicNoteQueryError = Error
 
 
-export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = AxiosError<Error>>(
+export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = Error>(
  username: string,
     slug: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -512,10 +520,10 @@ export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote
           TError,
           Awaited<ReturnType<typeof getPublicNote>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = AxiosError<Error>>(
+export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = Error>(
  username: string,
     slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -523,21 +531,21 @@ export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote
           TError,
           Awaited<ReturnType<typeof getPublicNote>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = AxiosError<Error>>(
+export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = Error>(
  username: string,
-    slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>>, axios?: AxiosRequestConfig}
+    slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary Get public note by username and slug (no auth)
  */
 
-export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = AxiosError<Error>>(
+export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote>>, TError = Error>(
  username: string,
-    slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>>, axios?: AxiosRequestConfig}
+    slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicNote>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
@@ -558,16 +566,17 @@ export function useGetPublicNote<TData = Awaited<ReturnType<typeof getPublicNote
  * @summary List notes
  */
 export const listNotes = (
-    params?: ListNotesParams, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<NotesPage>> => {
+    params?: ListNotesParams,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.get(
-      `/api/v1/notes`,{
-    ...options,
-        params: {...params, ...options?.params},}
-    );
-  }
+      return orvalRequester<NotesPage>(
+      {url: `/api/v1/notes`, method: 'GET',
+        params, signal
+    },
+      );
+    }
 
 
 
@@ -579,16 +588,16 @@ export const getListNotesQueryKey = (params?: ListNotesParams,) => {
     }
 
 
-export const getListNotesQueryOptions = <TData = Awaited<ReturnType<typeof listNotes>>, TError = AxiosError<Error>>(params?: ListNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getListNotesQueryOptions = <TData = Awaited<ReturnType<typeof listNotes>>, TError = Error>(params?: ListNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>>, }
 ) => {
 
-const {query: queryOptions, axios: axiosOptions} = options ?? {};
+const {query: queryOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getListNotesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNotes>>> = ({ signal }) => listNotes(params, { signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNotes>>> = ({ signal }) => listNotes(params, signal);
 
 
 
@@ -598,39 +607,39 @@ const {query: queryOptions, axios: axiosOptions} = options ?? {};
 }
 
 export type ListNotesQueryResult = NonNullable<Awaited<ReturnType<typeof listNotes>>>
-export type ListNotesQueryError = AxiosError<Error>
+export type ListNotesQueryError = Error
 
 
-export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = AxiosError<Error>>(
+export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = Error>(
  params: undefined |  ListNotesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listNotes>>,
           TError,
           Awaited<ReturnType<typeof listNotes>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = AxiosError<Error>>(
+export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = Error>(
  params?: ListNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listNotes>>,
           TError,
           Awaited<ReturnType<typeof listNotes>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = AxiosError<Error>>(
- params?: ListNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = Error>(
+ params?: ListNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary List notes
  */
 
-export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = AxiosError<Error>>(
- params?: ListNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TError = Error>(
+ params?: ListNotesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotes>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
@@ -651,29 +660,32 @@ export function useListNotes<TData = Awaited<ReturnType<typeof listNotes>>, TErr
  * @summary Create note
  */
 export const createNote = (
-    createNoteRequest?: CreateNoteRequest, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<Note>> => {
+    createNoteRequest?: CreateNoteRequest,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.post(
-      `/api/v1/notes`,
-      createNoteRequest,options
-    );
-  }
+      return orvalRequester<Note>(
+      {url: `/api/v1/notes`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createNoteRequest, signal
+    },
+      );
+    }
 
 
 
 
-export const getCreateNoteMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNote>>, TError,{data?: CreateNoteRequest}, TContext>, axios?: AxiosRequestConfig}
+export const getCreateNoteMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNote>>, TError,{data?: CreateNoteRequest}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof createNote>>, TError,{data?: CreateNoteRequest}, TContext> => {
 
 const mutationKey = ['createNote'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -681,7 +693,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof createNote>>, {data?: CreateNoteRequest}> = (props) => {
           const {data} = props ?? {};
 
-          return  createNote(data,axiosOptions)
+          return  createNote(data,)
         }
 
 
@@ -693,13 +705,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type CreateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof createNote>>>
     export type CreateNoteMutationBody = CreateNoteRequest | undefined
-    export type CreateNoteMutationError = AxiosError<Error>
+    export type CreateNoteMutationError = Error
 
     /**
  * @summary Create note
  */
-export const useCreateNote = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNote>>, TError,{data?: CreateNoteRequest}, TContext>, axios?: AxiosRequestConfig}
+export const useCreateNote = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNote>>, TError,{data?: CreateNoteRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createNote>>,
         TError,
@@ -713,14 +725,16 @@ export const useCreateNote = <TError = AxiosError<Error>,
  * @summary Get note by id
  */
 export const getNote = (
-    id: number, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<Note>> => {
+    id: number,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.get(
-      `/api/v1/notes/${id}`,options
-    );
-  }
+      return orvalRequester<Note>(
+      {url: `/api/v1/notes/${id}`, method: 'GET', signal
+    },
+      );
+    }
 
 
 
@@ -732,16 +746,16 @@ export const getGetNoteQueryKey = (id: number,) => {
     }
 
 
-export const getGetNoteQueryOptions = <TData = Awaited<ReturnType<typeof getNote>>, TError = AxiosError<Error>>(id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getGetNoteQueryOptions = <TData = Awaited<ReturnType<typeof getNote>>, TError = Error>(id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>>, }
 ) => {
 
-const {query: queryOptions, axios: axiosOptions} = options ?? {};
+const {query: queryOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetNoteQueryKey(id);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNote>>> = ({ signal }) => getNote(id, { signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNote>>> = ({ signal }) => getNote(id, signal);
 
 
 
@@ -751,39 +765,39 @@ const {query: queryOptions, axios: axiosOptions} = options ?? {};
 }
 
 export type GetNoteQueryResult = NonNullable<Awaited<ReturnType<typeof getNote>>>
-export type GetNoteQueryError = AxiosError<Error>
+export type GetNoteQueryError = Error
 
 
-export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = AxiosError<Error>>(
+export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = Error>(
  id: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getNote>>,
           TError,
           Awaited<ReturnType<typeof getNote>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = AxiosError<Error>>(
+export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = Error>(
  id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getNote>>,
           TError,
           Awaited<ReturnType<typeof getNote>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = AxiosError<Error>>(
- id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = Error>(
+ id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary Get note by id
  */
 
-export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = AxiosError<Error>>(
- id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError = Error>(
+ id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNote>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
@@ -805,29 +819,32 @@ export function useGetNote<TData = Awaited<ReturnType<typeof getNote>>, TError =
  */
 export const updateNote = (
     id: number,
-    updateNoteRequest?: UpdateNoteRequest, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<Note>> => {
+    updateNoteRequest?: UpdateNoteRequest,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.patch(
-      `/api/v1/notes/${id}`,
-      updateNoteRequest,options
-    );
-  }
+      return orvalRequester<Note>(
+      {url: `/api/v1/notes/${id}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateNoteRequest, signal
+    },
+      );
+    }
 
 
 
 
-export const getUpdateNoteMutationOptions = <TError = AxiosError<Error | VersionConflictError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext>, axios?: AxiosRequestConfig}
+export const getUpdateNoteMutationOptions = <TError = Error | VersionConflictError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext> => {
 
 const mutationKey = ['updateNote'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -835,7 +852,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateNote>>, {id: number;data?: UpdateNoteRequest}> = (props) => {
           const {id,data} = props ?? {};
 
-          return  updateNote(id,data,axiosOptions)
+          return  updateNote(id,data,)
         }
 
 
@@ -847,13 +864,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type UpdateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof updateNote>>>
     export type UpdateNoteMutationBody = UpdateNoteRequest | undefined
-    export type UpdateNoteMutationError = AxiosError<Error | VersionConflictError>
+    export type UpdateNoteMutationError = Error | VersionConflictError
 
     /**
  * @summary Update note (autosave & optimistic concurrency)
  */
-export const useUpdateNote = <TError = AxiosError<Error | VersionConflictError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext>, axios?: AxiosRequestConfig}
+export const useUpdateNote = <TError = Error | VersionConflictError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNote>>, TError,{id: number;data?: UpdateNoteRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateNote>>,
         TError,
@@ -867,28 +884,30 @@ export const useUpdateNote = <TError = AxiosError<Error | VersionConflictError>,
  * @summary Delete note
  */
 export const deleteNote = (
-    id: number, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<void>> => {
+    id: number,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.delete(
-      `/api/v1/notes/${id}`,options
-    );
-  }
+      return orvalRequester<void>(
+      {url: `/api/v1/notes/${id}`, method: 'DELETE', signal
+    },
+      );
+    }
 
 
 
 
-export const getDeleteNoteMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteNote>>, TError,{id: number}, TContext>, axios?: AxiosRequestConfig}
+export const getDeleteNoteMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteNote>>, TError,{id: number}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteNote>>, TError,{id: number}, TContext> => {
 
 const mutationKey = ['deleteNote'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -896,7 +915,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteNote>>, {id: number}> = (props) => {
           const {id} = props ?? {};
 
-          return  deleteNote(id,axiosOptions)
+          return  deleteNote(id,)
         }
 
 
@@ -908,13 +927,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type DeleteNoteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteNote>>>
 
-    export type DeleteNoteMutationError = AxiosError<Error>
+    export type DeleteNoteMutationError = Error
 
     /**
  * @summary Delete note
  */
-export const useDeleteNote = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteNote>>, TError,{id: number}, TContext>, axios?: AxiosRequestConfig}
+export const useDeleteNote = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteNote>>, TError,{id: number}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteNote>>,
         TError,
@@ -928,14 +947,16 @@ export const useDeleteNote = <TError = AxiosError<Error>,
  * @summary List folders
  */
 export const listFolders = (
-     options?: AxiosRequestConfig
- ): Promise<AxiosResponse<FolderList>> => {
+
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.get(
-      `/api/v1/folders`,options
-    );
-  }
+      return orvalRequester<FolderList>(
+      {url: `/api/v1/folders`, method: 'GET', signal
+    },
+      );
+    }
 
 
 
@@ -947,16 +968,16 @@ export const getListFoldersQueryKey = () => {
     }
 
 
-export const getListFoldersQueryOptions = <TData = Awaited<ReturnType<typeof listFolders>>, TError = AxiosError<Error>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getListFoldersQueryOptions = <TData = Awaited<ReturnType<typeof listFolders>>, TError = Error>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>>, }
 ) => {
 
-const {query: queryOptions, axios: axiosOptions} = options ?? {};
+const {query: queryOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getListFoldersQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFolders>>> = ({ signal }) => listFolders({ signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFolders>>> = ({ signal }) => listFolders(signal);
 
 
 
@@ -966,39 +987,39 @@ const {query: queryOptions, axios: axiosOptions} = options ?? {};
 }
 
 export type ListFoldersQueryResult = NonNullable<Awaited<ReturnType<typeof listFolders>>>
-export type ListFoldersQueryError = AxiosError<Error>
+export type ListFoldersQueryError = Error
 
 
-export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = AxiosError<Error>>(
+export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = Error>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listFolders>>,
           TError,
           Awaited<ReturnType<typeof listFolders>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = AxiosError<Error>>(
+export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = Error>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listFolders>>,
           TError,
           Awaited<ReturnType<typeof listFolders>>
         > , 'initialData'
-      >, axios?: AxiosRequestConfig}
+      >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = AxiosError<Error>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = Error>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary List folders
  */
 
-export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = AxiosError<Error>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>>, axios?: AxiosRequestConfig}
+export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, TError = Error>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFolders>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
@@ -1019,29 +1040,32 @@ export function useListFolders<TData = Awaited<ReturnType<typeof listFolders>>, 
  * @summary Create folder
  */
 export const createFolder = (
-    createFolderRequest: CreateFolderRequest, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<Folder>> => {
+    createFolderRequest: CreateFolderRequest,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.post(
-      `/api/v1/folders`,
-      createFolderRequest,options
-    );
-  }
+      return orvalRequester<Folder>(
+      {url: `/api/v1/folders`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createFolderRequest, signal
+    },
+      );
+    }
 
 
 
 
-export const getCreateFolderMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFolder>>, TError,{data: CreateFolderRequest}, TContext>, axios?: AxiosRequestConfig}
+export const getCreateFolderMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFolder>>, TError,{data: CreateFolderRequest}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof createFolder>>, TError,{data: CreateFolderRequest}, TContext> => {
 
 const mutationKey = ['createFolder'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -1049,7 +1073,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFolder>>, {data: CreateFolderRequest}> = (props) => {
           const {data} = props ?? {};
 
-          return  createFolder(data,axiosOptions)
+          return  createFolder(data,)
         }
 
 
@@ -1061,13 +1085,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type CreateFolderMutationResult = NonNullable<Awaited<ReturnType<typeof createFolder>>>
     export type CreateFolderMutationBody = CreateFolderRequest
-    export type CreateFolderMutationError = AxiosError<Error>
+    export type CreateFolderMutationError = Error
 
     /**
  * @summary Create folder
  */
-export const useCreateFolder = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFolder>>, TError,{data: CreateFolderRequest}, TContext>, axios?: AxiosRequestConfig}
+export const useCreateFolder = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFolder>>, TError,{data: CreateFolderRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createFolder>>,
         TError,
@@ -1082,29 +1106,32 @@ export const useCreateFolder = <TError = AxiosError<Error>,
  */
 export const updateFolder = (
     id: number,
-    updateFolderRequest: UpdateFolderRequest, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<Folder>> => {
+    updateFolderRequest: UpdateFolderRequest,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.patch(
-      `/api/v1/folders/${id}`,
-      updateFolderRequest,options
-    );
-  }
+      return orvalRequester<Folder>(
+      {url: `/api/v1/folders/${id}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateFolderRequest, signal
+    },
+      );
+    }
 
 
 
 
-export const getUpdateFolderMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFolder>>, TError,{id: number;data: UpdateFolderRequest}, TContext>, axios?: AxiosRequestConfig}
+export const getUpdateFolderMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFolder>>, TError,{id: number;data: UpdateFolderRequest}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof updateFolder>>, TError,{id: number;data: UpdateFolderRequest}, TContext> => {
 
 const mutationKey = ['updateFolder'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -1112,7 +1139,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFolder>>, {id: number;data: UpdateFolderRequest}> = (props) => {
           const {id,data} = props ?? {};
 
-          return  updateFolder(id,data,axiosOptions)
+          return  updateFolder(id,data,)
         }
 
 
@@ -1124,13 +1151,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type UpdateFolderMutationResult = NonNullable<Awaited<ReturnType<typeof updateFolder>>>
     export type UpdateFolderMutationBody = UpdateFolderRequest
-    export type UpdateFolderMutationError = AxiosError<Error>
+    export type UpdateFolderMutationError = Error
 
     /**
  * @summary Update folder
  */
-export const useUpdateFolder = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFolder>>, TError,{id: number;data: UpdateFolderRequest}, TContext>, axios?: AxiosRequestConfig}
+export const useUpdateFolder = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFolder>>, TError,{id: number;data: UpdateFolderRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateFolder>>,
         TError,
@@ -1144,28 +1171,30 @@ export const useUpdateFolder = <TError = AxiosError<Error>,
  * @summary Delete folder
  */
 export const deleteFolder = (
-    id: number, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<void>> => {
+    id: number,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.delete(
-      `/api/v1/folders/${id}`,options
-    );
-  }
+      return orvalRequester<void>(
+      {url: `/api/v1/folders/${id}`, method: 'DELETE', signal
+    },
+      );
+    }
 
 
 
 
-export const getDeleteFolderMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFolder>>, TError,{id: number}, TContext>, axios?: AxiosRequestConfig}
+export const getDeleteFolderMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFolder>>, TError,{id: number}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteFolder>>, TError,{id: number}, TContext> => {
 
 const mutationKey = ['deleteFolder'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -1173,7 +1202,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFolder>>, {id: number}> = (props) => {
           const {id} = props ?? {};
 
-          return  deleteFolder(id,axiosOptions)
+          return  deleteFolder(id,)
         }
 
 
@@ -1185,13 +1214,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type DeleteFolderMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFolder>>>
 
-    export type DeleteFolderMutationError = AxiosError<Error>
+    export type DeleteFolderMutationError = Error
 
     /**
  * @summary Delete folder
  */
-export const useDeleteFolder = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFolder>>, TError,{id: number}, TContext>, axios?: AxiosRequestConfig}
+export const useDeleteFolder = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFolder>>, TError,{id: number}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteFolder>>,
         TError,
@@ -1205,29 +1234,32 @@ export const useDeleteFolder = <TError = AxiosError<Error>,
  * @summary Reorder folders/notes (drag-and-drop)
  */
 export const reorderTree = (
-    reorderRequest: ReorderRequest, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<ReorderTree200>> => {
+    reorderRequest: ReorderRequest,
+ signal?: AbortSignal
+) => {
 
 
-    return axios.default.post(
-      `/api/v1/tree/reorder`,
-      reorderRequest,options
-    );
-  }
+      return orvalRequester<ReorderTree200>(
+      {url: `/api/v1/tree/reorder`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: reorderRequest, signal
+    },
+      );
+    }
 
 
 
 
-export const getReorderTreeMutationOptions = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reorderTree>>, TError,{data: ReorderRequest}, TContext>, axios?: AxiosRequestConfig}
+export const getReorderTreeMutationOptions = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reorderTree>>, TError,{data: ReorderRequest}, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof reorderTree>>, TError,{data: ReorderRequest}, TContext> => {
 
 const mutationKey = ['reorderTree'];
-const {mutation: mutationOptions, axios: axiosOptions} = options ?
+const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
       : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, axios: undefined};
+      : {mutation: { mutationKey, }};
 
 
 
@@ -1235,7 +1267,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof reorderTree>>, {data: ReorderRequest}> = (props) => {
           const {data} = props ?? {};
 
-          return  reorderTree(data,axiosOptions)
+          return  reorderTree(data,)
         }
 
 
@@ -1247,13 +1279,13 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
 
     export type ReorderTreeMutationResult = NonNullable<Awaited<ReturnType<typeof reorderTree>>>
     export type ReorderTreeMutationBody = ReorderRequest
-    export type ReorderTreeMutationError = AxiosError<Error>
+    export type ReorderTreeMutationError = Error
 
     /**
  * @summary Reorder folders/notes (drag-and-drop)
  */
-export const useReorderTree = <TError = AxiosError<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reorderTree>>, TError,{data: ReorderRequest}, TContext>, axios?: AxiosRequestConfig}
+export const useReorderTree = <TError = Error,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reorderTree>>, TError,{data: ReorderRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof reorderTree>>,
         TError,
@@ -1272,9 +1304,9 @@ export const getAuthRefreshResponseMock = (overrideResponse: Partial<Extract<Aut
 
 export const getGetCurrentUserResponseMock = (overrideResponse: Partial<Extract<User, object>> = {}): User => ({id: faker.number.int(), username: faker.string.alpha({length: {min: 10, max: 20}}), email: faker.internet.email(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', ...overrideResponse})
 
-export const getListPublicNotesResponseMock = (overrideResponse: Partial<Extract<PublicNotesPage, object>> = {}): PublicNotesPage => ({items: Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.helpers.arrayElement([faker.number.int(), undefined]), title: faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), undefined]), slug: faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), undefined]), user_id: faker.helpers.arrayElement([faker.number.int(), undefined]), author_username: faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), undefined]), excerpt: faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), created_at: faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', undefined]), updated_at: faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', undefined])})), total: faker.number.int(), limit: faker.number.int(), offset: faker.number.int(), ...overrideResponse})
+export const getListPublicNotesResponseMock = (overrideResponse: Partial<Extract<PublicNotesPage, object>> = {}): PublicNotesPage => ({items: Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.number.int(), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.string.alpha({length: {min: 10, max: 20}}), user_id: faker.number.int(), author_username: faker.string.alpha({length: {min: 10, max: 20}}), excerpt: faker.string.alpha({length: {min: 10, max: 20}}), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'})), total: faker.number.int(), limit: faker.number.int(), offset: faker.number.int(), ...overrideResponse})
 
-export const getGetPublicNoteResponseMock = (): PublicNote => ({...{id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'},...{author_username: faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), undefined])},})
+export const getGetPublicNoteResponseMock = (): PublicNote => ({...{id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'},...{author_username: faker.string.alpha({length: {min: 10, max: 20}})},})
 
 export const getListNotesResponseMock = (overrideResponse: Partial<Extract<NotesPage, object>> = {}): NotesPage => ({items: Array.from({ length: faker.number.int({min: 1, max: 10}) }, (_, i) => i + 1).map(() => ({id: faker.number.int(), user_id: faker.number.int(), folder_id: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.number.int(), null]), undefined]), title: faker.string.alpha({length: {min: 10, max: 20}}), slug: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), cover_url: faker.helpers.arrayElement([faker.helpers.arrayElement([faker.string.alpha({length: {min: 10, max: 20}}), null]), undefined]), content_md: faker.string.alpha({length: {min: 10, max: 20}}), content_html: faker.string.alpha({length: {min: 10, max: 20}}), is_published: faker.datatype.boolean(), visibility: faker.helpers.arrayElement(['private','unlisted','public'] as const), sort_order: faker.number.int(), created_at: faker.date.past().toISOString().slice(0, 19) + 'Z', updated_at: faker.date.past().toISOString().slice(0, 19) + 'Z'})), total: faker.number.int(), limit: faker.number.int(), offset: faker.number.int(), ...overrideResponse})
 

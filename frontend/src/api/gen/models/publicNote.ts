@@ -12,5 +12,5 @@
 import type { Note } from './note';
 
 export type PublicNote = Note & {
-  author_username?: string;
+  author_username: string;
 };

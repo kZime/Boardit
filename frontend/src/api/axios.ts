@@ -1,6 +1,12 @@
 // src/api/axios.ts
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import { getAccessToken, setAccessToken, getRefreshToken } from '../contexts/AuthContext'
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken,
+} from '../auth/tokenStorage'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/',
@@ -44,13 +50,12 @@ function refreshAccessToken(refreshToken: string): Promise<string> {
         if (!data?.access_token) throw new Error('bad refresh response')
         setAccessToken(data.access_token)
         if (data.refresh_token) {
-          localStorage.setItem('refreshToken', data.refresh_token)
+          setRefreshToken(data.refresh_token)
         }
         return data.access_token as string
       })
       .catch((error) => {
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
+        clearTokens()
         throw error
       })
       .finally(() => {
@@ -73,8 +78,7 @@ export const authResponseInterceptor = async (err: AxiosError) => {
   // non-auth request: try refresh, but must have refresh_token
   const rt = getRefreshToken()
   if (!rt) {
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
+    clearTokens()
     return Promise.reject(err)
   }
 

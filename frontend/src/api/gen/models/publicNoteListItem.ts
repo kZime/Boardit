@@ -11,14 +11,14 @@
  */
 
 export interface PublicNoteListItem {
-  id?: number;
-  title?: string;
-  slug?: string;
-  user_id?: number;
-  author_username?: string;
-  excerpt?: string;
+  id: number;
+  title: string;
+  slug: string;
+  user_id: number;
+  author_username: string;
+  excerpt: string;
   /** @nullable */
   cover_url?: string | null;
-  created_at?: string;
-  updated_at?: string;
+  created_at: string;
+  updated_at: string;
 }

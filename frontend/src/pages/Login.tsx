@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { authErrorMessage, validateLogin } from '../auth/form';
 
 // Check if we're in mock mode
 const isMockMode = import.meta.env.DEV && import.meta.env.VITE_USE_MSW === 'true';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   const { login } = useAuth();
@@ -18,31 +17,17 @@ export default function Login() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
-    const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
-    if (!trimmedEmail) {
-      setErr('Email is required');
-      return;
-    }
-    if (!EMAIL_RE.test(trimmedEmail)) {
-      setErr('Please enter a valid email address');
-      return;
-    }
-    if (!trimmedPassword) {
-      setErr('Password is required');
+    const validation = validateLogin({ email, password });
+    if (!validation.ok) {
+      setErr(validation.error);
       return;
     }
     setIsSubmitting(true);
     try {
-      await login(trimmedEmail, trimmedPassword);
+      await login(validation.value.email, validation.value.password);
       nav('/editor');
     } catch (e: unknown) {
-      if (typeof e === 'object' && e !== null && 'response' in e) {
-        // @ts-expect-error: e.response may exist on error objects from axios
-        setErr(e.response?.data?.error || 'LOGIN FAILED');
-      } else {
-        setErr('LOGIN FAILED');
-      }
+      setErr(authErrorMessage(e, 'LOGIN FAILED'));
     } finally {
       setIsSubmitting(false);
     }

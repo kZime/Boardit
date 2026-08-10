@@ -13,9 +13,9 @@ module.exports = {
       baseUrl: '',
       schemas: 'src/api/gen/models',
       prettier: true,
-    },
-    override: {
-      mutator: { path: 'src/api/orval-axios.ts', name: 'orvalRequester' },
+      override: {
+        mutator: { path: 'src/api/orval-axios.ts', name: 'orvalRequester' },
+      },
     },
   },
 }

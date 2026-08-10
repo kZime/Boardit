@@ -2,10 +2,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-
-
-
 import api from '../api/axios';
+import { clearTokens, getAccessToken, setTokens } from '../auth/tokenStorage';
 import { jwtDecode } from 'jwt-decode';
 
 interface AuthContextType {
@@ -16,27 +14,13 @@ interface AuthContextType {
 }
 const AuthContext = createContext<AuthContextType>({} as any);
 
-// Exposed for Axios interceptor to get the current token
-export function getAccessToken(): string | null {
-  return localStorage.getItem('accessToken');
-}
-
-export function getRefreshToken(): string | null {
-  return localStorage.getItem('refreshToken');
-}
-
-export function setAccessToken(token: string) {
-  localStorage.setItem('accessToken', token);
-}
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [accessToken, setToken] = useState<string | null>(getAccessToken());
 
   const login = async (email: string, password: string) => {
     const { data } = await api.post('/api/auth/login', { email, password });
     setToken(data.access_token);
-    localStorage.setItem('accessToken', data.access_token);
-    localStorage.setItem('refreshToken', data.refresh_token);
+    setTokens(data.access_token, data.refresh_token);
   };
 
   const register = async (username: string, email: string, password: string) => {
@@ -45,8 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+    clearTokens();
     setToken(null);
     // SPA: PrivateRoute will redirect to /login when token is null
   };

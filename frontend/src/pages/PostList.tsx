@@ -1,41 +1,12 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { ArrowRight } from "lucide-react";
-import api from "../api/axios";
+import { useListPublicNotes } from "../api/gen/client";
 import SiteHeader from "../components/SiteHeader";
 
-interface PublicNoteItem {
-  id: number;
-  title: string;
-  slug: string;
-  user_id: number;
-  author_username: string;
-  excerpt: string;
-  cover_url?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface PublicNotesPage {
-  items: PublicNoteItem[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
 export default function PostList() {
-  const [data, setData] = useState<PublicNotesPage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .get<PublicNotesPage>("/api/v1/public/notes", { params: { limit: 50, offset: 0 } })
-      .then((res) => setData(res.data))
-      .catch(() => setError("Failed to load posts"))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: response, isLoading, isError } = useListPublicNotes({ limit: 50, offset: 0 });
+  const data = response?.data;
 
   const formatDate = (s: string) => {
     try {
@@ -58,14 +29,14 @@ export default function PostList() {
           Public posts
         </h1>
 
-        {loading && (
+        {isLoading && (
           <p className="text-gray-500 dark:text-gray-400 text-sm">Loading…</p>
         )}
-        {error && (
-          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+        {isError && (
+          <p className="text-red-600 dark:text-red-400 text-sm">Failed to load posts</p>
         )}
 
-        {data && !loading && (
+        {data && !isLoading && (
           <ul className="space-y-4">
             {data.items.length === 0 ? (
               <li className="text-center py-12 text-gray-500 dark:text-gray-400 text-sm">
