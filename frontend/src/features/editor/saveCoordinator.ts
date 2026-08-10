@@ -41,6 +41,13 @@ export function isDirty(markdown: string, details: PageDetails, saved: SavedSnap
   )
 }
 
+export function shouldReplaceEditorContent(
+  dirty: boolean,
+  confirmDiscard: () => boolean,
+): boolean {
+  return !dirty || confirmDiscard()
+}
+
 export function getVersionConflict(error: unknown): VersionConflictError | null {
   if (!axios.isAxiosError<VersionConflictError>(error) || error.response?.status !== 409) {
     return null

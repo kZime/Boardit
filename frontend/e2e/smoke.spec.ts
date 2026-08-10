@@ -36,6 +36,32 @@ test('an author can edit and publish a note', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Published by smoke test' })).toBeVisible()
 })
 
+test('dirty editor content is protected when switching or creating notes', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'DEV: Skip Login (Mock Mode)' }).click()
+  await page.getByRole('button', { name: 'Welcome to Boardit', exact: true }).click()
+
+  const title = page.getByPlaceholder('Enter page title...')
+  await title.fill('Unsaved title')
+  const dialogs: string[] = []
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message())
+    await dialog.dismiss()
+  })
+
+  await page.getByRole('button', { name: 'Public Page Example', exact: true }).click()
+  await expect.poll(() => dialogs.length).toBe(1)
+  await expect(title).toHaveValue('Unsaved title')
+
+  await page.getByRole('button', { name: 'New', exact: true }).click()
+  await expect.poll(() => dialogs.length).toBe(2)
+  await expect(title).toHaveValue('Unsaved title')
+  expect(dialogs).toEqual([
+    'You have unsaved changes. Discard them?',
+    'You have unsaved changes. Discard them?',
+  ])
+})
+
 test('unlisted notes are published for direct-link access', async ({ page }) => {
   await page.goto('/login')
   await page.getByRole('button', { name: 'DEV: Skip Login (Mock Mode)' }).click()

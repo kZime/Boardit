@@ -60,6 +60,43 @@ func TestServiceCreatesVersionedRevisionsAndOutboxEvents(t *testing.T) {
 	require.Equal(t, int64(2), eventCount)
 }
 
+func TestServiceNoOpUpdateDoesNotCreateRevisionOrOutboxEvent(t *testing.T) {
+	service, db, owner, _ := newTestService(t)
+	ctx := context.Background()
+	created, err := service.CreateNote(ctx, owner.ID, CreateNoteInput{
+		Title: "Unchanged", ContentMD: "same body",
+	})
+	require.NoError(t, err)
+
+	title := created.Title
+	coverURL := created.CoverURL
+	content := created.ContentMD
+	published := created.IsPublished
+	visibility := created.Visibility
+	version := created.Version
+	updated, err := service.UpdateNote(ctx, owner.ID, created.ID, UpdateNoteInput{
+		Title:       &title,
+		FolderID:    OptionalUint{Set: true, Value: nil},
+		CoverURL:    &coverURL,
+		ContentMD:   &content,
+		IsPublished: &published,
+		Visibility:  &visibility,
+		Version:     &version,
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.Version, updated.Version)
+	require.Equal(t, created.UpdatedAt, updated.UpdatedAt)
+
+	var revisionCount int64
+	require.NoError(t, db.Model(&model.NoteRevision{}).
+		Where("note_id = ?", created.ID).Count(&revisionCount).Error)
+	require.Equal(t, int64(1), revisionCount)
+	var eventCount int64
+	require.NoError(t, db.Model(&model.OutboxEvent{}).
+		Where("aggregate_id = ? AND user_id = ?", created.ID, owner.ID).Count(&eventCount).Error)
+	require.Equal(t, int64(1), eventCount)
+}
+
 func TestRevisionFailureRollsBackNoteUpdate(t *testing.T) {
 	service, db, owner, _ := newTestService(t)
 	ctx := context.Background()

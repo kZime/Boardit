@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { getVersionConflict, isDirty, saveExistingNote, versionForMove } from './saveCoordinator'
+import {
+  getVersionConflict,
+  isDirty,
+  saveExistingNote,
+  shouldReplaceEditorContent,
+  versionForMove,
+} from './saveCoordinator'
 
 const details = {
   title: 'Published note',
@@ -48,6 +54,14 @@ describe('editor save coordinator', () => {
     expect(isDirty('# body', details, saved)).toBe(false)
     expect(isDirty('# changed', details, saved)).toBe(true)
     expect(isDirty('# body', { ...details, coverUrl: 'https://example.com/new.png' }, saved)).toBe(true)
+  })
+
+  it('requires confirmation before replacing dirty editor content', () => {
+    const confirmDiscard = vi.fn(() => false)
+    expect(shouldReplaceEditorContent(false, confirmDiscard)).toBe(true)
+    expect(confirmDiscard).not.toHaveBeenCalled()
+    expect(shouldReplaceEditorContent(true, confirmDiscard)).toBe(false)
+    expect(confirmDiscard).toHaveBeenCalledOnce()
   })
 
   it('extracts version conflicts from Axios errors', () => {

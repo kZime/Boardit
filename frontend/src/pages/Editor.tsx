@@ -1,5 +1,5 @@
 // src/pages/Editor.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -38,9 +38,11 @@ import MetadataModal from "../features/editor/MetadataModal";
 import NoteTreeSidebar from "../features/editor/NoteTreeSidebar";
 import SaveConflictDialog from "../features/editor/SaveConflictDialog";
 import {
+  buildUpdateRequest,
   getVersionConflict,
   isDirty,
   saveExistingNote,
+  shouldReplaceEditorContent,
   snapshotOf,
   type SavedSnapshot,
   versionForMove,
@@ -70,6 +72,8 @@ export default function Editor() {
   const [open, setOpen] = useState(true);
   // Current note being edited
   const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
+  const currentNoteIdRef = useRef<number | null>(null);
+  currentNoteIdRef.current = currentNoteId;
   const [currentVersion, setCurrentVersion] = useState<number | null>(null);
 
   // Current markdown content being edited
@@ -101,6 +105,11 @@ export default function Editor() {
   // Save success notification state
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [saveConflict, setSaveConflict] = useState<VersionConflictError | null>(null);
+  const [pendingMoveConflict, setPendingMoveConflict] = useState<{
+    noteID: number;
+    folderID: number | null;
+  } | null>(null);
+  const [moveConflictMessage, setMoveConflictMessage] = useState<string | null>(null);
 
   // Delete confirmation modal: note to delete or null
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
@@ -116,6 +125,10 @@ export default function Editor() {
     visibility: "private",
   });
   const isDirtyRef = useRef(false);
+  const confirmEditorReplacement = useCallback(() => shouldReplaceEditorContent(
+    isDirtyRef.current,
+    () => window.confirm("You have unsaved changes. Discard them?")
+  ), []);
   useEffect(() => {
     if (!currentNoteId) {
       isDirtyRef.current = false;
@@ -146,6 +159,7 @@ export default function Editor() {
     if (Number.isNaN(id)) return;
     const note = items.find((n: Note) => n.id === id);
     if (note) {
+      if (note.id !== currentNoteIdRef.current && !confirmEditorReplacement()) return;
       const title = note.title || "Untitled";
       const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
       setCurrentNoteId(note.id);
@@ -161,7 +175,7 @@ export default function Editor() {
       setPageDetails(details);
       lastSavedRef.current = snapshotOf(note.content_md || "", details);
     }
-  }, [noteIdFromUrl, isLoading, items]);
+  }, [noteIdFromUrl, isLoading, items, confirmEditorReplacement]);
 
   // Ref for save handler so keydown effect can call latest handleSave without deps
   const saveHandlerRef = useRef<() => Promise<void>>(() => Promise.resolve());
@@ -206,6 +220,7 @@ export default function Editor() {
 
   // ==== Actions ====
   const handleNew = async () => {
+    if (!confirmEditorReplacement()) return;
     try {
       const newNoteData: CreateNoteRequest = {
         title: defaultTitle,
@@ -307,6 +322,7 @@ export default function Editor() {
   };
 
   const handleSelectNote = (note: Note) => {
+    if (note.id === currentNoteId || !confirmEditorReplacement()) return;
     const title = note.title || "Untitled";
     const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
     setCurrentNoteId(note.id);
@@ -352,6 +368,18 @@ export default function Editor() {
       if (noteId === currentNoteId) setCurrentVersion(response.data.version);
       refetchNotes();
     } catch (error) {
+      const conflict = getVersionConflict(error);
+      if (conflict) {
+        void refetchNotes();
+        if (noteId === currentNoteId) {
+          setPendingMoveConflict({ noteID: noteId, folderID: folderId });
+          setSaveConflict(conflict);
+        } else {
+          setMoveConflictMessage("That note changed elsewhere. The list was refreshed; try moving it again.");
+          setTimeout(() => setMoveConflictMessage(null), 5000);
+        }
+        return;
+      }
       console.error("Failed to move note:", error);
       throw error;
     }
@@ -398,13 +426,44 @@ export default function Editor() {
     isDirtyRef.current = false;
     editorRef.current?.setMarkdown(note.content_md || "");
     setSaveConflict(null);
+    setPendingMoveConflict(null);
     setShowEditModal(false);
     void refetchNotes();
   };
 
   const handleOverwriteConflict = async () => {
     if (!saveConflict) return;
+    if (pendingMoveConflict) {
+      try {
+        const response = await updateNoteMutation.mutateAsync({
+          id: pendingMoveConflict.noteID,
+          data: {
+            ...buildUpdateRequest(md, pageDetails, saveConflict.server_snapshot.version),
+            folder_id: pendingMoveConflict.folderID,
+          },
+        });
+        lastSavedRef.current = snapshotOf(md, pageDetails);
+        isDirtyRef.current = false;
+        setCurrentVersion(response.data.version);
+        setSaveConflict(null);
+        setPendingMoveConflict(null);
+        void refetchNotes();
+      } catch (error) {
+        const conflict = getVersionConflict(error);
+        if (conflict) {
+          setSaveConflict(conflict);
+          return;
+        }
+        console.error("Failed to resolve move conflict:", error);
+      }
+      return;
+    }
     await handleSave(saveConflict.server_snapshot.version);
+  };
+
+  const handleKeepEditingAfterConflict = () => {
+    setSaveConflict(null);
+    setPendingMoveConflict(null);
   };
 
   return (
@@ -679,6 +738,12 @@ export default function Editor() {
         </div>
       )}
 
+      {moveConflictMessage && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-900 shadow-lg dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          {moveConflictMessage}
+        </div>
+      )}
+
       {/* Edit Page Details Modal */}
       {showEditModal && (
         <MetadataModal
@@ -707,7 +772,7 @@ export default function Editor() {
           localCoverUrl={pageDetails.coverUrl}
           localVisibility={pageDetails.visibility}
           isSaving={updateNoteMutation.isPending}
-          onKeepEditing={() => setSaveConflict(null)}
+          onKeepEditing={handleKeepEditingAfterConflict}
           onLoadServer={handleLoadServerVersion}
           onOverwrite={() => void handleOverwriteConflict()}
         />

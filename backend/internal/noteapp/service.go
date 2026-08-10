@@ -239,7 +239,7 @@ func (service *Service) updateNoteInTransaction(ctx context.Context, userID, not
 	}
 
 	hasChanges := false
-	if input.Title != nil {
+	if input.Title != nil && *input.Title != note.Title {
 		note.Title = *input.Title
 		note.Slug, err = service.uniqueSlug(ctx, note.Title, userID, &noteID)
 		if err != nil {
@@ -251,8 +251,10 @@ func (service *Service) updateNoteInTransaction(ctx context.Context, userID, not
 		if err := service.requireFolder(ctx, userID, input.FolderID.Value); err != nil {
 			return Note{}, err
 		}
-		note.FolderID = input.FolderID.Value
-		hasChanges = true
+		if !optionalUintEqual(note.FolderID, input.FolderID.Value) {
+			note.FolderID = input.FolderID.Value
+			hasChanges = true
+		}
 	}
 	if input.CoverURL != nil && *input.CoverURL != note.CoverURL {
 		note.CoverURL = *input.CoverURL
@@ -263,7 +265,7 @@ func (service *Service) updateNoteInTransaction(ctx context.Context, userID, not
 		note.ContentHtml = convertMarkdownToHTML(note.ContentMd)
 		hasChanges = true
 	}
-	if input.IsPublished != nil {
+	if input.IsPublished != nil && *input.IsPublished != note.IsPublished {
 		note.IsPublished = *input.IsPublished
 		hasChanges = true
 	}
@@ -271,8 +273,10 @@ func (service *Service) updateNoteInTransaction(ctx context.Context, userID, not
 		if !validVisibility(*input.Visibility) {
 			return Note{}, invalid("invalid visibility")
 		}
-		note.Visibility = *input.Visibility
-		hasChanges = true
+		if *input.Visibility != note.Visibility {
+			note.Visibility = *input.Visibility
+			hasChanges = true
+		}
 	}
 	if !hasChanges {
 		return toNoteDTO(note), nil
@@ -284,6 +288,13 @@ func (service *Service) updateNoteInTransaction(ctx context.Context, userID, not
 		return Note{}, err
 	}
 	return toNoteDTO(note), nil
+}
+
+func optionalUintEqual(left, right *uint) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func (service *Service) ListNoteRevisions(ctx context.Context, userID, noteID uint) ([]NoteRevision, error) {
