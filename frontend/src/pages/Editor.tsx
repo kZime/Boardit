@@ -1,5 +1,5 @@
 // src/pages/Editor.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -30,103 +30,36 @@ import {
 } from "@mdxeditor/editor";
 
 import ReactMarkdown from "react-markdown";
-import { Menu, LogOut, Plus, Trash2, X, Check, FileText, Pencil, FolderPlus, Folder as FolderIcon, ChevronRight, ChevronDown } from "lucide-react";
+import { Menu, LogOut, Plus, Check, FileText, Pencil } from "lucide-react";
 import { parseFrontmatterAndBody } from "../utils/markdownCover";
 import PostHeaderCard from "../components/PostHeaderCard";
+import DeleteNoteDialog from "../features/editor/DeleteNoteDialog";
+import MetadataModal from "../features/editor/MetadataModal";
+import NoteTreeSidebar from "../features/editor/NoteTreeSidebar";
+import SaveConflictDialog from "../features/editor/SaveConflictDialog";
+import {
+  buildUpdateRequest,
+  getVersionConflict,
+  isDirty,
+  saveExistingNote,
+  shouldReplaceEditorContent,
+  snapshotOf,
+  type SavedSnapshot,
+  versionForMove,
+} from "../features/editor/saveCoordinator";
 
 // Orval generated hooks
 import {
-  useListNotes,
   useCreateNote,
   useUpdateNote,
   useDeleteNote,
   useListFolders,
   useCreateFolder,
 } from "../api/gen/client";
+import { useAllNotes } from "../features/editor/useAllNotes";
 import type { Note } from "../api/gen/models/note";
-import type { Folder } from "../api/gen/models/folder";
 import type { CreateNoteRequest } from "../api/gen/models/createNoteRequest";
-import type { UpdateNoteRequest } from "../api/gen/models/updateNoteRequest";
-
-// Note row used in sidebar (both in folders and unfiled)
-function NoteRow({
-  note,
-  currentNoteId,
-  movingNoteId,
-  folders,
-  onSelect,
-  onDelete,
-  onMoveStart,
-  onMove,
-}: {
-  note: Note;
-  currentNoteId: number | null;
-  movingNoteId: number | null;
-  folders: Folder[];
-  onSelect: (n: Note) => void;
-  onDelete: (n: Note) => void;
-  onMoveStart: (id: number | null) => void;
-  onMove: (noteId: number, folderId: number | null) => void;
-}) {
-  return (
-    <div className="group relative flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-700/80 transition-colors">
-      <button
-        className={`text-left flex-1 truncate px-2 py-1 rounded-md text-sm transition-colors ${
-          currentNoteId === note.id
-            ? "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-medium"
-            : "hover:bg-gray-100 dark:hover:bg-gray-700"
-        }`}
-        onClick={() => onSelect(note)}
-        title={note.title}
-      >
-        {note.title || "(Untitled)"}
-      </button>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
-        {/* Move to folder button */}
-        <div className="relative">
-          <button
-            onClick={(e) => { e.stopPropagation(); onMoveStart(movingNoteId === note.id ? null : note.id); }}
-            className="p-1.5 rounded-md text-gray-400 hover:bg-gray-300/80 hover:text-gray-600 dark:hover:bg-gray-600 dark:hover:text-gray-200 transition-colors"
-            title="Move to folder"
-          >
-            <FolderIcon className="w-3.5 h-3.5" />
-          </button>
-          {movingNoteId === note.id && (
-            <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[150px]">
-              <button
-                onClick={() => { onMove(note.id, null); }}
-                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-                  !note.folder_id ? "text-blue-600 dark:text-blue-400 font-medium" : "text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                Unfiled
-              </button>
-              {folders.map((f: Folder) => (
-                <button
-                  key={f.id}
-                  onClick={() => { onMove(note.id, f.id); }}
-                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 ${
-                    note.folder_id === f.id ? "text-blue-600 dark:text-blue-400 font-medium" : "text-gray-700 dark:text-gray-300"
-                  }`}
-                >
-                  <FolderIcon className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{f.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(note); }}
-          className="p-1.5 rounded-md text-gray-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/40 dark:hover:text-red-400 transition-all"
-          title="Delete"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
+import type { VersionConflictError } from "../api/gen/models/versionConflictError";
 
 export default function Editor() {
   const navigate = useNavigate();
@@ -139,6 +72,9 @@ export default function Editor() {
   const [open, setOpen] = useState(true);
   // Current note being edited
   const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
+  const currentNoteIdRef = useRef<number | null>(null);
+  currentNoteIdRef.current = currentNoteId;
+  const [currentVersion, setCurrentVersion] = useState<number | null>(null);
 
   // Current markdown content being edited
   const defaultTitle = "Untitled Page";
@@ -168,36 +104,38 @@ export default function Editor() {
 
   // Save success notification state
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [saveConflict, setSaveConflict] = useState<VersionConflictError | null>(null);
+  const [pendingMoveConflict, setPendingMoveConflict] = useState<{
+    noteID: number;
+    folderID: number | null;
+  } | null>(null);
+  const [moveConflictMessage, setMoveConflictMessage] = useState<string | null>(null);
 
   // Delete confirmation modal: note to delete or null
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
-
-  // Folder management state
-  const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
-  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [movingNoteId, setMovingNoteId] = useState<number | null>(null);
 
   // Edit vs Preview mode
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
 
   // Last saved snapshot for dirty check (refs so beforeunload can read)
-  const lastSavedRef = useRef<{
-    md: string;
-    title: string;
-    visibility: "private" | "public" | "unlisted";
-  }>({ md: defaultMd, title: defaultTitle, visibility: "private" });
+  const lastSavedRef = useRef<SavedSnapshot>({
+    md: defaultMd,
+    title: defaultTitle,
+    coverUrl: "",
+    visibility: "private",
+  });
   const isDirtyRef = useRef(false);
+  const confirmEditorReplacement = useCallback(() => shouldReplaceEditorContent(
+    isDirtyRef.current,
+    () => window.confirm("You have unsaved changes. Discard them?")
+  ), []);
   useEffect(() => {
     if (!currentNoteId) {
       isDirtyRef.current = false;
       return;
     }
-    isDirtyRef.current =
-      md !== lastSavedRef.current.md ||
-      pageDetails.title !== lastSavedRef.current.title ||
-      pageDetails.visibility !== lastSavedRef.current.visibility;
-  }, [currentNoteId, md, pageDetails.title, pageDetails.visibility]);
+    isDirtyRef.current = isDirty(md, pageDetails, lastSavedRef.current);
+  }, [currentNoteId, md, pageDetails]);
 
   // Load notes list
   const {
@@ -205,7 +143,7 @@ export default function Editor() {
     isLoading,
     isError,
     refetch: refetchNotes,
-  } = useListNotes({ limit: 50, offset: 0 });
+  } = useAllNotes();
 
   // Load current note details (currently unused but available for future use)
   // const { data: currentNote, isLoading: isLoadingNote } = useGetNote(
@@ -214,27 +152,30 @@ export default function Editor() {
   // )
 
   // Open note from URL ?noteId= when notes have loaded
-  const items = useMemo(() => data?.data?.items ?? [], [data?.data?.items]);
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
   useEffect(() => {
     if (!noteIdFromUrl || isLoading || items.length === 0) return;
     const id = parseInt(noteIdFromUrl, 10);
     if (Number.isNaN(id)) return;
     const note = items.find((n: Note) => n.id === id);
     if (note) {
+      if (note.id !== currentNoteIdRef.current && !confirmEditorReplacement()) return;
       const title = note.title || "Untitled";
       const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
       setCurrentNoteId(note.id);
+      setCurrentVersion(note.version);
       setMd(note.content_md || "");
-      setPageDetails({
+      const details = {
         title,
         coverUrl: note.cover_url || "",
         description: "",
         tags: "",
         visibility: vis,
-      });
-      lastSavedRef.current = { md: note.content_md || "", title, visibility: vis };
+      };
+      setPageDetails(details);
+      lastSavedRef.current = snapshotOf(note.content_md || "", details);
     }
-  }, [noteIdFromUrl, isLoading, items]);
+  }, [noteIdFromUrl, isLoading, items, confirmEditorReplacement]);
 
   // Ref for save handler so keydown effect can call latest handleSave without deps
   const saveHandlerRef = useRef<() => Promise<void>>(() => Promise.resolve());
@@ -279,6 +220,7 @@ export default function Editor() {
 
   // ==== Actions ====
   const handleNew = async () => {
+    if (!confirmEditorReplacement()) return;
     try {
       const newNoteData: CreateNoteRequest = {
         title: defaultTitle,
@@ -292,15 +234,18 @@ export default function Editor() {
         const title = result.data.title || defaultTitle;
         const vis = result.data.visibility || "private";
         setCurrentNoteId(result.data.id);
+        setCurrentVersion(result.data.version);
         setMd(result.data.content_md || "");
-        setPageDetails({
+        const details = {
           title,
           coverUrl: "",
           description: "",
           tags: "",
           visibility: vis,
-        });
-        lastSavedRef.current = { md: result.data.content_md || "", title, visibility: vis };
+        };
+        setPageDetails(details);
+        lastSavedRef.current = snapshotOf(result.data.content_md || "", details);
+        setSaveConflict(null);
         refetchNotes(); // Refresh the notes list
       }
     } catch (error) {
@@ -313,6 +258,7 @@ export default function Editor() {
       await deleteNoteMutation.mutateAsync({ id });
       if (currentNoteId === id) {
         setCurrentNoteId(null);
+        setCurrentVersion(null);
         setMd(defaultMd);
         setPageDetails({
           title: defaultTitle,
@@ -321,6 +267,7 @@ export default function Editor() {
           tags: "",
           visibility: "private",
         });
+        setSaveConflict(null);
       }
       refetchNotes();
       setNoteToDelete(null);
@@ -329,57 +276,68 @@ export default function Editor() {
     }
   };
 
-  const handleSave = async () => {
-    if (!currentNoteId) {
+  const handleSave = async (versionOverride?: number) => {
+    if (!currentNoteId || currentVersion === null) {
       // Create new note if no current note
       await handleNew();
-      return;
+      return true;
     }
 
     try {
-      const updateData: UpdateNoteRequest = {
-        title: pageDetails.title,
-        cover_url: pageDetails.coverUrl,
-        content_md: md,
-        is_published: pageDetails.visibility === "public",
-        visibility: pageDetails.visibility as "private" | "public" | "unlisted",
-      };
-
-      await updateNoteMutation.mutateAsync({
-        id: currentNoteId,
-        data: updateData,
+      const saved = await saveExistingNote({
+        updateNote: async (noteID, request) => {
+          const response = await updateNoteMutation.mutateAsync({ id: noteID, data: request });
+          return response.data;
+        },
+      }, {
+        noteID: currentNoteId,
+        markdown: md,
+        details: pageDetails,
+        version: versionOverride ?? currentVersion,
       });
       refetchNotes(); // Refresh the notes list
-      lastSavedRef.current = {
-        md,
-        title: pageDetails.title,
-        visibility: pageDetails.visibility,
-      };
+      lastSavedRef.current = saved.snapshot;
+      setCurrentVersion(saved.version);
+      isDirtyRef.current = false;
+      setSaveConflict(null);
 
       // Show success notification
       setShowSaveSuccess(true);
       setTimeout(() => {
         setShowSaveSuccess(false);
       }, 3000); // Hide after 3 seconds
+      return true;
     } catch (error) {
+      const conflict = getVersionConflict(error);
+      if (conflict) {
+        setSaveConflict(conflict);
+        return false;
+      }
       console.error("Failed to save note:", error);
+      return false;
     }
   };
-  saveHandlerRef.current = handleSave;
+  saveHandlerRef.current = async () => {
+    await handleSave();
+  };
 
   const handleSelectNote = (note: Note) => {
+    if (note.id === currentNoteId || !confirmEditorReplacement()) return;
     const title = note.title || "Untitled";
     const vis = (note.visibility as "private" | "public" | "unlisted") || "private";
     setCurrentNoteId(note.id);
+    setCurrentVersion(note.version);
     setMd(note.content_md || "");
-    setPageDetails({
+    const details = {
       title,
       coverUrl: note.cover_url || "",
       description: "",
       tags: "",
       visibility: vis,
-    });
-    lastSavedRef.current = { md: note.content_md || "", title, visibility: vis };
+    };
+    setPageDetails(details);
+    lastSavedRef.current = snapshotOf(note.content_md || "", details);
+    setSaveConflict(null);
 
     // Force MDXEditor to update its content
     setTimeout(() => {
@@ -389,28 +347,41 @@ export default function Editor() {
     }, 0);
   };
 
-  const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return;
+  const handleCreateFolder = async (name: string) => {
     try {
-      await createFolderMutation.mutateAsync({ data: { name: newFolderName.trim() } });
-      setNewFolderName("");
-      setShowNewFolderInput(false);
+      await createFolderMutation.mutateAsync({ data: { name } });
       refetchFolders();
     } catch (error) {
       console.error("Failed to create folder:", error);
+      throw error;
     }
   };
 
   const handleMoveNote = async (noteId: number, folderId: number | null) => {
     try {
-      await updateNoteMutation.mutateAsync({
+      const target = items.find((note) => note.id === noteId);
+      const version = versionForMove(noteId, currentNoteId, currentVersion, target?.version);
+      const response = await updateNoteMutation.mutateAsync({
         id: noteId,
-        data: { folder_id: folderId },
+        data: { folder_id: folderId, version },
       });
-      setMovingNoteId(null);
+      if (noteId === currentNoteId) setCurrentVersion(response.data.version);
       refetchNotes();
     } catch (error) {
+      const conflict = getVersionConflict(error);
+      if (conflict) {
+        void refetchNotes();
+        if (noteId === currentNoteId) {
+          setPendingMoveConflict({ noteID: noteId, folderID: folderId });
+          setSaveConflict(conflict);
+        } else {
+          setMoveConflictMessage("That note changed elsewhere. The list was refreshed; try moving it again.");
+          setTimeout(() => setMoveConflictMessage(null), 5000);
+        }
+        return;
+      }
       console.error("Failed to move note:", error);
+      throw error;
     }
   };
 
@@ -428,60 +399,71 @@ export default function Editor() {
       setShowEditModal(false);
       return;
     }
-    try {
-      const updateData: UpdateNoteRequest = {
-        title: pageDetails.title,
-        cover_url: pageDetails.coverUrl,
-        content_md: md,
-        is_published: pageDetails.visibility === "public",
-        visibility: pageDetails.visibility as "private" | "public" | "unlisted",
-      };
-      await updateNoteMutation.mutateAsync({
-        id: currentNoteId,
-        data: updateData,
-      });
-      refetchNotes();
-      lastSavedRef.current = {
-        md,
-        title: pageDetails.title,
-        visibility: pageDetails.visibility,
-      };
-      setShowSaveSuccess(true);
-      setTimeout(() => setShowSaveSuccess(false), 3000);
-      setShowEditModal(false);
-    } catch (error) {
-      console.error("Failed to save page details:", error);
-    }
+    if (await handleSave()) setShowEditModal(false);
   };
 
-  const handlePageDetailsChange = async (field: string, value: string) => {
+  const handlePageDetailsChange = (field: string, value: string) => {
     setPageDetails((prev) => ({
       ...prev,
       [field]: value,
     }));
+  };
 
-    // If we're changing the title and have a current note, save it immediately
-    if (field === "title" && currentNoteId) {
+  const handleLoadServerVersion = () => {
+    if (!saveConflict) return;
+    const note = saveConflict.server_snapshot;
+    const details = {
+      title: note.title || "Untitled",
+      coverUrl: note.cover_url || "",
+      description: "",
+      tags: "",
+      visibility: note.visibility,
+    };
+    setCurrentVersion(note.version);
+    setMd(note.content_md || "");
+    setPageDetails(details);
+    lastSavedRef.current = snapshotOf(note.content_md || "", details);
+    isDirtyRef.current = false;
+    editorRef.current?.setMarkdown(note.content_md || "");
+    setSaveConflict(null);
+    setPendingMoveConflict(null);
+    setShowEditModal(false);
+    void refetchNotes();
+  };
+
+  const handleOverwriteConflict = async () => {
+    if (!saveConflict) return;
+    if (pendingMoveConflict) {
       try {
-        const updateData: UpdateNoteRequest = {
-          title: value,
-          content_md: md,
-          is_published: pageDetails.visibility === "public",
-          visibility: pageDetails.visibility as
-            | "private"
-            | "public"
-            | "unlisted",
-        };
-
-        await updateNoteMutation.mutateAsync({
-          id: currentNoteId,
-          data: updateData,
+        const response = await updateNoteMutation.mutateAsync({
+          id: pendingMoveConflict.noteID,
+          data: {
+            ...buildUpdateRequest(md, pageDetails, saveConflict.server_snapshot.version),
+            folder_id: pendingMoveConflict.folderID,
+          },
         });
-        refetchNotes(); // Refresh the notes list to update sidebar
+        lastSavedRef.current = snapshotOf(md, pageDetails);
+        isDirtyRef.current = false;
+        setCurrentVersion(response.data.version);
+        setSaveConflict(null);
+        setPendingMoveConflict(null);
+        void refetchNotes();
       } catch (error) {
-        console.error("Failed to save title:", error);
+        const conflict = getVersionConflict(error);
+        if (conflict) {
+          setSaveConflict(conflict);
+          return;
+        }
+        console.error("Failed to resolve move conflict:", error);
       }
+      return;
     }
+    await handleSave(saveConflict.server_snapshot.version);
+  };
+
+  const handleKeepEditingAfterConflict = () => {
+    setSaveConflict(null);
+    setPendingMoveConflict(null);
   };
 
   return (
@@ -528,172 +510,21 @@ export default function Editor() {
 
       {/* Main area: sidebar + editor */}
       <div className="flex-1 flex overflow-hidden bg-gray-50 dark:bg-gray-900">
-        {/* Sidebar (fixed width on desktop, drawer on mobile) */}
-        {/* Overlay (mobile only) */}
-        {open && (
-          <div
-            className="fixed inset-0 bg-black/20 z-30 md:hidden"
-            onClick={() => setOpen(false)}
-          />
-        )}
-
-        {/* sidebar */}
-        <aside
-          id="sidebar"
-          className={[
-            "z-40 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto transition-colors",
-            // Mobile: fixed position, Desktop: static position
-            "fixed h-full md:static",
-            // Control width and visibility based on open state
-            open
-              ? "w-72 translate-x-0 md:translate-x-0 md:w-72"
-              : "w-72 -translate-x-full md:translate-x-0 md:w-0",
-          ].join(" ")}
-          style={{ transition: "transform .2s ease, width .2s ease" }}
-        >
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100">Notes</h2>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => { setShowNewFolderInput(true); setNewFolderName(""); }}
-                className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                title="New folder"
-              >
-                <FolderPlus className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleNew}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                New
-              </button>
-            </div>
-          </div>
-
-          <div className="p-2">
-            {/* New folder input */}
-            {showNewFolderInput && (
-              <div className="flex items-center gap-1 px-2 py-1.5 mb-1">
-                <input
-                  autoFocus
-                  type="text"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void handleCreateFolder();
-                    if (e.key === "Escape") { setShowNewFolderInput(false); setNewFolderName(""); }
-                  }}
-                  placeholder="Folder name…"
-                  className="flex-1 text-sm px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <button
-                  onClick={() => void handleCreateFolder()}
-                  disabled={!newFolderName.trim() || createFolderMutation.isPending}
-                  className="p-1 rounded-md text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-40 transition-colors"
-                  title="Create"
-                >
-                  <Check className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => { setShowNewFolderInput(false); setNewFolderName(""); }}
-                  className="p-1 rounded-md text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                  title="Cancel"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {isLoading && (
-              <div className="text-sm text-gray-500 dark:text-gray-400 p-2">Loading…</div>
-            )}
-            {isError && (
-              <div className="text-sm text-red-600 dark:text-red-400 p-2">
-                Failed to load notes
-              </div>
-            )}
-
-            {/* Folder groups */}
-            {folders.map((folder: Folder) => {
-              const folderNotes = items.filter((n: Note) => n.folder_id === folder.id);
-              const isExpanded = expandedFolders.has(folder.id);
-              return (
-                <div key={folder.id} className="mb-1">
-                  <button
-                    onClick={() => setExpandedFolders((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id);
-                      return next;
-                    })}
-                    className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-200/80 dark:hover:bg-gray-700/80 transition-colors text-sm font-medium"
-                  >
-                    {isExpanded
-                      ? <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" />
-                      : <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-400" />}
-                    <FolderIcon className="w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-gray-500" />
-                    <span className="truncate flex-1 text-left">{folder.name}</span>
-                    <span className="text-xs text-gray-400 dark:text-gray-500">{folderNotes.length}</span>
-                  </button>
-                  {isExpanded && (
-                    <ul className="space-y-0.5 ml-4 mt-0.5">
-                      {folderNotes.length === 0 && (
-                        <li className="text-xs text-gray-400 dark:text-gray-500 px-3 py-1">Empty</li>
-                      )}
-                      {folderNotes.map((n: Note) => (
-                        <li key={n.id}>
-                          <NoteRow
-                            note={n}
-                            currentNoteId={currentNoteId}
-                            movingNoteId={movingNoteId}
-                            folders={folders}
-                            onSelect={handleSelectNote}
-                            onDelete={setNoteToDelete}
-                            onMoveStart={setMovingNoteId}
-                            onMove={handleMoveNote}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Unfiled notes */}
-            {(() => {
-              const unfiledNotes = items.filter((n: Note) => !n.folder_id);
-              return (
-                <>
-                  {folders.length > 0 && unfiledNotes.length > 0 && (
-                    <div className="px-2 py-1 mt-2 mb-0.5">
-                      <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Unfiled</span>
-                    </div>
-                  )}
-                  <ul className="space-y-1">
-                    {unfiledNotes.map((n: Note) => (
-                      <li key={n.id}>
-                        <NoteRow
-                          note={n}
-                          currentNoteId={currentNoteId}
-                          movingNoteId={movingNoteId}
-                          folders={folders}
-                          onSelect={handleSelectNote}
-                          onDelete={setNoteToDelete}
-                          onMoveStart={setMovingNoteId}
-                          onMove={handleMoveNote}
-                        />
-                      </li>
-                    ))}
-                    {!isLoading && items.length === 0 && (
-                      <li className="text-sm text-gray-500 dark:text-gray-400 p-2">No notes</li>
-                    )}
-                  </ul>
-                </>
-              );
-            })()}
-          </div>
-        </aside>
+        <NoteTreeSidebar
+          open={open}
+          notes={items}
+          folders={folders}
+          currentNoteID={currentNoteId}
+          isLoading={isLoading}
+          isError={isError}
+          isCreatingFolder={createFolderMutation.isPending}
+          onClose={() => setOpen(false)}
+          onNewNote={() => void handleNew()}
+          onSelectNote={handleSelectNote}
+          onDeleteNote={setNoteToDelete}
+          onCreateFolder={handleCreateFolder}
+          onMoveNote={handleMoveNote}
+        />
 
         {/* editor area */}
         <main className="flex-1 overflow-auto p-4 md:p-6">
@@ -801,7 +632,7 @@ export default function Editor() {
                     </button>
                     <button
                       className="px-4 py-2 rounded-lg bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={handleSave}
+                      onClick={() => void handleSave()}
                       disabled={
                         updateNoteMutation.isPending || createNoteMutation.isPending
                       }
@@ -907,176 +738,44 @@ export default function Editor() {
         </div>
       )}
 
+      {moveConflictMessage && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-900 shadow-lg dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          {moveConflictMessage}
+        </div>
+      )}
+
       {/* Edit Page Details Modal */}
       {showEditModal && (
-        <div
-          className="fixed inset-0 bg-black/40 dark:bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={handleCloseModal}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Page Details</h3>
-              <button
-                onClick={handleCloseModal}
-                className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={pageDetails.title}
-                  onChange={(e) =>
-                    handlePageDetailsChange("title", e.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter page title"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Cover Image URL
-                </label>
-                <input
-                  type="url"
-                  value={pageDetails.coverUrl}
-                  onChange={(e) =>
-                    handlePageDetailsChange("coverUrl", e.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="https://example.com/cover.jpg"
-                />
-                {pageDetails.coverUrl && (
-                  <div className="mt-2 rounded-lg overflow-hidden aspect-[16/9] bg-gray-100 dark:bg-gray-900">
-                    <img
-                      src={pageDetails.coverUrl}
-                      alt="Cover preview"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={pageDetails.description}
-                  onChange={(e) =>
-                    handlePageDetailsChange("description", e.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Enter page description"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Tags
-                </label>
-                <input
-                  type="text"
-                  value={pageDetails.tags}
-                  onChange={(e) =>
-                    handlePageDetailsChange("tags", e.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter tags (comma separated)"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Visibility
-                </label>
-                <select
-                  value={pageDetails.visibility}
-                  onChange={(e) =>
-                    handlePageDetailsChange("visibility", e.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="private">Private</option>
-                  <option value="public">Public</option>
-                  <option value="unlisted">Unlisted</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 p-6 border-t">
-              <button
-                onClick={handleCloseModal}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSavePageDetails}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
+        <MetadataModal
+          details={pageDetails}
+          onChange={handlePageDetailsChange}
+          onClose={handleCloseModal}
+          onSave={() => void handleSavePageDetails()}
+        />
       )}
 
       {/* Delete note confirmation modal */}
       {noteToDelete && (
-        <div
-          className="fixed inset-0 bg-black/40 dark:bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setNoteToDelete(null)}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Delete note?</h3>
-              <button
-                onClick={() => setNoteToDelete(null)}
-                className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-              {noteToDelete.title || "Untitled"} will be permanently deleted. This cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => setNoteToDelete(null)}
-                className="px-4 py-2 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void handleDelete(noteToDelete.id)}
-                disabled={deleteNoteMutation.isPending}
-                className="px-4 py-2 bg-red-500 dark:bg-red-600 text-white rounded-lg hover:bg-red-600 dark:hover:bg-red-500 disabled:opacity-50 transition-colors"
-              >
-                {deleteNoteMutation.isPending ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteNoteDialog
+          note={noteToDelete}
+          isDeleting={deleteNoteMutation.isPending}
+          onCancel={() => setNoteToDelete(null)}
+          onConfirm={(noteID) => void handleDelete(noteID)}
+        />
+      )}
+
+      {saveConflict && (
+        <SaveConflictDialog
+          serverNote={saveConflict.server_snapshot}
+          localTitle={pageDetails.title}
+          localMarkdown={md}
+          localCoverUrl={pageDetails.coverUrl}
+          localVisibility={pageDetails.visibility}
+          isSaving={updateNoteMutation.isPending}
+          onKeepEditing={handleKeepEditingAfterConflict}
+          onLoadServer={handleLoadServerVersion}
+          onOverwrite={() => void handleOverwriteConflict()}
+        />
       )}
     </div>
   );

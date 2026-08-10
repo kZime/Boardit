@@ -1,187 +1,58 @@
-# Boardit Backend
+# Boardit backend
 
-## APIs
+The Go API is a modular monolith for authentication, notes, folders, publishing, revisions, and durable change events.
 
-| Method | Endpoint             | Description                                                                   |
-| ------ | -------------------- | ----------------------------------------------------------------------------- |
-| POST   | `/api/auth/register` | `{ username, email, password }`, return new user info (without password) |
-| POST   | `/api/auth/login`    | `{ email, password }`, return `{ access_token, refresh_token }`    |
-| POST   | `/api/auth/refresh`  | `{ refresh_token }`, return new `{ access_token, refresh_token }` |
-| GET    | `/api/user`          | get current user info (need to carry `Authorization: Bearer <access_token>` in Header) |
-
-## Testing
-
-### Test Structure
-
-The backend uses a comprehensive testing strategy with test suites for different components:
-
-```
-backend/
-├── internal/
-│   ├── handler/
-│   │   ├── handler_test.go      # Auth handler tests (test suite)
-│   │   └── ...
-│   ├── middleware/
-│   │   ├── jwt_test.go          # JWT middleware tests (test suite)
-│   │   └── ...
-│   ├── router/
-│   │   ├── router_test.go       # Router configuration tests (test suite)
-│   │   └── ...
-│   ├── database/
-│   │   ├── database_test.go     # Database connection tests
-│   │   └── ...
-│   └── testutils/
-│       └── testutils.go         # Test utilities and helpers
-```
-
-### Test Types
-
-#### 1. Handler Tests (`handler_test.go`)
-- **Purpose**: Test business logic and API endpoints
-- **Structure**: Uses `AuthTestSuite` with shared state
-- **Features**:
-  - Tests complete authentication flow (register → login → refresh → get user)
-  - Shared test data between tests
-  - Database cleanup between tests
-  - Real HTTP requests simulation
-
-#### 2. Middleware Tests (`jwt_test.go`)
-- **Purpose**: Test JWT authentication middleware
-- **Structure**: Uses `JWTMiddlewareTestSuite`
-- **Test Cases**:
-  - Valid JWT tokens
-  - Invalid/expired tokens
-  - Missing Authorization headers
-  - Invalid header formats
-  - Wrong signing methods
-  - Missing/invalid claims
-
-#### 3. Router Tests (`router_test.go`)
-- **Purpose**: Test route configuration and middleware setup
-- **Structure**: Uses `RouterTestSuite`
-- **Test Cases**:
-  - Route existence verification
-  - CORS configuration
-  - Authentication middleware application
-  - Error handling (404, 405)
-  - Content-Type handling
-
-#### 4. Database Tests (`database_test.go`)
-- **Purpose**: Test database connection and migration
-- **Features**: Database initialization and cleanup
-
-### Running Tests
-
-#### Default (no setup)
-With `backend/.env.test` containing `DATABASE_DSN=:memory:` (or no `.env.test` and env not set), tests use **SQLite in-memory** — no PostgreSQL or test user required. Just run:
+## Run
 
 ```bash
-cd backend
-go test -v ./...
+cp .env_sample .env
+# Set DATABASE_DSN and JWT_SECRET.
+go run .
 ```
 
-#### Optional: test against PostgreSQL
-To run tests against a real PostgreSQL instance (e.g. to catch dialect-specific issues): copy `.env_test_sample` to `.env.test`, set `DATABASE_DSN` to your test database, and run the same command. CI uses PostgreSQL.
+Startup validates configuration, opens PostgreSQL or SQLite, applies pending embedded SQL migrations, and then starts the HTTP server on the configured address.
 
-#### Test Commands
+## Dependency direction
+
+```text
+router -> HTTP handler -> noteapp.Service -> Repository -> GORM/database
+```
+
+- `internal/noteapp` owns permissions, concurrency, transaction, revision, and publishing rules.
+- `internal/handler` owns HTTP parsing and response mapping.
+- `internal/model` is persistence-only.
+- Future AI writes must call the note use-case and must not write GORM models directly.
+
+See the root [architecture](../docs/architecture.md) and [agent guide](../AGENTS.md) for complete invariants.
+
+## Test
 
 ```bash
-# Run all tests
-go test -v ./...
-
-# Run tests for specific package
-go test -v ./internal/handler
-go test -v ./internal/middleware
-go test -v ./internal/router
-go test -v ./internal/database
-
-# Run specific test suite
-go test -v ./internal/handler -run TestAuthSuite
-go test -v ./internal/middleware -run TestJWTMiddlewareSuite
-go test -v ./internal/router -run TestRouterSuite
-
-# Run specific test
-go test -v ./internal/handler -run TestAuthSuite/TestLoginSuccess
-go test -v ./internal/middleware -run TestJWTMiddlewareSuite/TestValidToken
-
-# Run tests with coverage
-go test -v -cover ./...
-go test -v -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
+test -z "$(gofmt -l .)"
+go vet ./...
+go test -race -p 1 ./...
 ```
 
-### Test Data Management
+Tests default to SQLite with `DATABASE_DSN=:memory:`. CI runs against PostgreSQL 15. Test databases are truncated; never use a database containing valuable data.
 
-- **Setup**: Each test suite initializes its own test data
-- **Cleanup**: Database is cleaned between tests to ensure isolation
-- **Isolation**: Tests are independent and can run in any order
+## Database operations
 
-### Test Coverage
+```bash
+# Apply pending migrations explicitly
+go run ./cmd/migrate -direction up
 
-Current test coverage includes:
-- ✅ Authentication flow (register, login, refresh, get user)
-- ✅ JWT middleware validation
-- ✅ Route configuration and CORS
-- ✅ Database connection and migration
-- ✅ Error handling and edge cases
-
-### Adding New Tests
-
-When adding new functionality, follow these patterns:
-
-#### 1. Handler Tests
-```go
-func (suite *YourTestSuite) TestNewFeature() {
-    // Setup test data
-    suite.setupTestData()
-    
-    // Make request
-    req, err := http.NewRequest("POST", "/api/endpoint", bytes.NewBuffer(body))
-    suite.NoError(err)
-    
-    // Assert response
-    suite.Equal(http.StatusOK, w.Code)
-}
+# Roll back exactly one migration after reviewing its down SQL
+go run ./cmd/migrate -direction down
 ```
 
-#### 2. Middleware Tests
-```go
-func (suite *MiddlewareTestSuite) TestNewMiddleware() {
-    // Test middleware behavior
-    req, err := http.NewRequest("GET", "/test", nil)
-    suite.NoError(err)
-    
-    // Assert middleware response
-    suite.Equal(expectedStatus, w.Code)
-}
-```
+Read [database-migrations.md](docs/database-migrations.md) before schema changes or rollback. Applied migrations are immutable and every new version requires PostgreSQL and SQLite up/down files.
 
-#### 3. Router Tests
-```go
-func (suite *RouterTestSuite) TestNewRoute() {
-    // Test route existence and behavior
-    req, err := http.NewRequest("GET", "/api/new-route", nil)
-    suite.NoError(err)
-    
-    // Assert route response
-    suite.NotEqual(http.StatusNotFound, w.Code)
-}
-```
+## API contract
 
-## API Contract
+`docs/api/api-contract-v1.yaml` is authoritative. After changing it, regenerate the frontend client from `frontend/` with `npm run orval`. Do not hand-edit generated TypeScript.
 
-The API contract is defined in `docs/api/api-contract-v1.md`.
+Useful references:
 
-Every time the API contract is updated, please update the `docs/api/api-contract-v1.yaml` file.
-
-## Development Log
-
-**2025-08-20:** 
-- Added comprehensive test suite structure
-- Implemented JWT middleware tests
-- Added router configuration tests
-- Improved test isolation and cleanup
-
-**2025-08-04:** 
-- Add github.com/stretchr/testify/assert for testing
-- Initial test setup for auth handlers
+- [AI and asynchronous data boundaries](docs/ai-data-boundaries.md)
+- [Testing strategy](../docs/testing-strategy.md)
+- [Architecture decisions](../docs/adr/README.md)

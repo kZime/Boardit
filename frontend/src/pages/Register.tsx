@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
+import { authErrorMessage, validateRegistration } from '../auth/form';
 
 export default function Register() {
   const { register } = useAuth();
@@ -17,40 +15,17 @@ export default function Register() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
-    const trimmedUsername = username.trim();
-    const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
-    if (!trimmedUsername) {
-      setErr('Username is required');
-      return;
-    }
-    if (!trimmedEmail) {
-      setErr('Email is required');
-      return;
-    }
-    if (!EMAIL_RE.test(trimmedEmail)) {
-      setErr('Please enter a valid email address');
-      return;
-    }
-    if (!trimmedPassword) {
-      setErr('Password is required');
-      return;
-    }
-    if (trimmedPassword.length < MIN_PASSWORD_LENGTH) {
-      setErr(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    const validation = validateRegistration({ username, email, password });
+    if (!validation.ok) {
+      setErr(validation.error);
       return;
     }
     setIsSubmitting(true);
     try {
-      await register(trimmedUsername, trimmedEmail, trimmedPassword);
+      await register(validation.value.username, validation.value.email, validation.value.password);
       nav('/editor');
     } catch (e: unknown) {
-      if (typeof e === 'object' && e !== null && 'response' in e) {
-        const error = e as { response?: { data?: { error?: string } } };
-        setErr(error.response?.data?.error || 'REGISTER FAILED');
-      } else {
-        setErr('REGISTER FAILED');
-      }
+      setErr(authErrorMessage(e, 'REGISTER FAILED'));
     } finally {
       setIsSubmitting(false);
     }

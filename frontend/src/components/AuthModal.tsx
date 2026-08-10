@@ -3,9 +3,7 @@ import { X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useAuthModal } from "../contexts/AuthModalContext";
 import type { AuthModalMode } from "../contexts/AuthModalContext";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
+import { authErrorMessage, validateLogin, validateRegistration } from "../auth/form";
 const isMockMode = import.meta.env.DEV && import.meta.env.VITE_USE_MSW === "true";
 
 export default function AuthModal() {
@@ -49,31 +47,17 @@ export default function AuthModal() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr("");
-    const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
-    if (!trimmedEmail) {
-      setErr("Email is required");
-      return;
-    }
-    if (!EMAIL_RE.test(trimmedEmail)) {
-      setErr("Please enter a valid email address");
-      return;
-    }
-    if (!trimmedPassword) {
-      setErr("Password is required");
+    const validation = validateLogin({ email, password });
+    if (!validation.ok) {
+      setErr(validation.error);
       return;
     }
     setIsSubmitting(true);
     try {
-      await login(trimmedEmail, trimmedPassword);
+      await login(validation.value.email, validation.value.password);
       closeAuthModal();
     } catch (e: unknown) {
-      if (typeof e === "object" && e !== null && "response" in e) {
-        const res = e as { response?: { data?: { error?: string } } };
-        setErr(res.response?.data?.error || "LOGIN FAILED");
-      } else {
-        setErr("LOGIN FAILED");
-      }
+      setErr(authErrorMessage(e, "LOGIN FAILED"));
     } finally {
       setIsSubmitting(false);
     }
@@ -82,40 +66,17 @@ export default function AuthModal() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr("");
-    const trimmedUsername = username.trim();
-    const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
-    if (!trimmedUsername) {
-      setErr("Username is required");
-      return;
-    }
-    if (!trimmedEmail) {
-      setErr("Email is required");
-      return;
-    }
-    if (!EMAIL_RE.test(trimmedEmail)) {
-      setErr("Please enter a valid email address");
-      return;
-    }
-    if (!trimmedPassword) {
-      setErr("Password is required");
-      return;
-    }
-    if (trimmedPassword.length < MIN_PASSWORD_LENGTH) {
-      setErr(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    const validation = validateRegistration({ username, email, password });
+    if (!validation.ok) {
+      setErr(validation.error);
       return;
     }
     setIsSubmitting(true);
     try {
-      await register(trimmedUsername, trimmedEmail, trimmedPassword);
+      await register(validation.value.username, validation.value.email, validation.value.password);
       closeAuthModal();
     } catch (e: unknown) {
-      if (typeof e === "object" && e !== null && "response" in e) {
-        const res = e as { response?: { data?: { error?: string } } };
-        setErr(res.response?.data?.error || "REGISTER FAILED");
-      } else {
-        setErr("REGISTER FAILED");
-      }
+      setErr(authErrorMessage(e, "REGISTER FAILED"));
     } finally {
       setIsSubmitting(false);
     }

@@ -1,37 +1,49 @@
-# Boardit Frontend
+# Boardit frontend
 
-## Development
+React route composition, public publishing pages, authentication UI, and the lazy-loaded Markdown editor.
+
+## Run
 
 ```bash
-npm install
-npm run dev # use real api
-npm run dev:mock # use mock api
+npm ci
+npm run dev       # real API through the Vite proxy
+npm run dev:mock  # deterministic MSW API, no backend required
 ```
 
-## Every time you change the API contract, run
+When switching between real and mock authentication, clear the local session if needed:
+
+```js
+localStorage.removeItem('accessToken')
+localStorage.removeItem('refreshToken')
+location.reload()
+```
+
+## Test and build
+
+```bash
+npm run lint
+npm test
+npm run build
+npm run test:e2e
+```
+
+## API generation
+
+`backend/docs/api/api-contract-v1.yaml` is the source of truth.
 
 ```bash
 npm run orval
+git diff --exit-code -- src/api/gen
 ```
 
-generated `src/api/gen/client.ts` from `backend/docs/api/api-contract-v1.yaml`
+Never edit `src/api/gen/**` manually. Update the OpenAPI contract, regenerate, and keep MSW handlers aligned with required generated fields.
 
-check `src/mocks/browser.ts` to use fake api handlers.
+## Boundaries
 
-## styles design
+- React Query owns server cache.
+- `src/auth/tokenStorage.ts` owns token persistence; Axios does not import React context.
+- `src/features/editor` owns pagination, tree UI state, metadata, and save coordination.
+- `src/pages` composes route-level UI.
+- The Editor route stays lazy-loaded so MDXEditor does not enter the public initial bundle.
 
-use `@tailwindcss/vite` to generate css classes.
-
-use plugin `@tailwindcss/typography` to generate typography styles.
-
-use `@mdxeditor/editor` to generate markdown editor.
-
-## Debug
-
-remember to clear localstorage before switching between mock and real mode.
-
-```js
-localStorage.removeItem('accessToken');
-localStorage.removeItem('refreshToken');
-location.reload();
-```
+See the root [architecture](../docs/architecture.md), [testing strategy](../docs/testing-strategy.md), and [known debt](../docs/known-debt.md) for details.

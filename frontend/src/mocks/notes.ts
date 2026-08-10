@@ -29,6 +29,7 @@ const nowIso = () => new Date().toISOString()
       is_published: partial.is_published ?? false,
       visibility: (partial.visibility as Note['visibility']) ?? NoteVisibility.private,
       sort_order: partial.sort_order ?? notesDb.length,
+      version: partial.version ?? 1,
       created_at: partial.created_at ?? iso(new Date(base.getTime() - 1000 * 60 * 60)),
       updated_at: partial.updated_at ?? iso(now),
     }
@@ -105,6 +106,7 @@ export const createNoteHandler = http.post('*/api/v1/notes', async ({ request })
     is_published: false,
     visibility: NoteVisibility.private,
     sort_order: notesDb.length,
+    version: 1,
     created_at: ts,
     updated_at: ts,
   }
@@ -132,15 +134,31 @@ export const updateNoteHandler = http.patch('*/api/v1/notes/:id', async ({ param
 
   const patch = (await request.json()) as UpdateNoteRequest
   const prev = notesDb[idx]
+  if (!Number.isInteger(patch.version) || patch.version < 1) {
+    return HttpResponse.json({
+      error: 'VALIDATION_ERROR',
+      message: 'version is required and must be at least 1',
+    }, { status: 400 })
+  }
+  if (patch.version !== prev.version) {
+    return HttpResponse.json({
+      error: 'VERSION_CONFLICT',
+      message: 'note has been modified by another client',
+      server_updated_at: prev.updated_at,
+      server_snapshot: prev,
+    }, { status: 409 })
+  }
   const updated: Note = {
     ...prev,
     title: patch.title ?? prev.title,
-    folder_id: patch.folder_id ?? prev.folder_id,
+    folder_id: 'folder_id' in patch ? patch.folder_id : prev.folder_id,
+    cover_url: 'cover_url' in patch ? patch.cover_url : prev.cover_url,
     content_md: patch.content_md ?? prev.content_md,
     content_html: patch.content_md ?? prev.content_html,
     is_published: patch.is_published ?? prev.is_published,
     visibility: (patch.visibility as Note['visibility']) ?? prev.visibility,
     slug: prev.slug,
+    version: prev.version + 1,
     updated_at: nowIso(),
   }
 
@@ -216,4 +234,3 @@ export const noteMockHandlers = [
   listPublicNotesHandler,
   getPublicNoteHandler,
 ]
-

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backend/internal/config"
 	"backend/internal/database"
 	"log"
 	"os"
@@ -18,24 +19,29 @@ func main() {
 		log.Fatal("Error loading .env file: ", err)
 	}
 
+	configuration, err := config.Load()
+	if err != nil {
+		log.Fatalf("invalid configuration: %v", err)
+	}
+
 	// Init database
-	if err := database.Init(); err != nil {
+	if err := database.InitWithDSN(configuration.DatabaseDSN); err != nil {
 		log.Fatalf("failed to initialize the database: %v", err)
 	}
 
-	// Require JWT_SECRET for security (min 32 chars)
-	const minJWTSecretLen = 32
-	if secret := os.Getenv("JWT_SECRET"); len(secret) < minJWTSecretLen {
-		log.Fatalf("JWT_SECRET must be at least %d characters", minJWTSecretLen)
-	}
-
 	// Production: set GIN_MODE=release to disable debug and trust only configured proxies
-	if mode := os.Getenv("GIN_MODE"); mode != "" {
-		gin.SetMode(mode)
+	if configuration.GinMode != "" {
+		gin.SetMode(configuration.GinMode)
 	}
 
 	// Init router
-	r := router.Setup()
-	r.Run(":8080")
+	r := router.SetupWithOptions(database.DB, router.Options{
+		JWTSecret:      configuration.JWTSecret,
+		CORSOrigins:    configuration.CORSOrigins,
+		TrustedProxies: configuration.TrustedProxies,
+	})
+	if err := r.Run(configuration.ListenAddress); err != nil {
+		log.Fatalf("server failed: %v", err)
+	}
 
 }

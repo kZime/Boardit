@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS ai_candidates;
+DROP TABLE IF EXISTS ai_runs;
+DROP TABLE IF EXISTS background_jobs;
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS refresh_sessions;
+DROP INDEX IF EXISTS idx_note_revisions_user_id;
+DROP INDEX IF EXISTS idx_note_revision_version;
+ALTER TABLE note_revisions DROP CONSTRAINT IF EXISTS fk_note_revisions_user;
+ALTER TABLE note_revisions DROP COLUMN IF EXISTS source;
+ALTER TABLE note_revisions DROP COLUMN IF EXISTS content_html;
+ALTER TABLE note_revisions DROP COLUMN IF EXISTS title;
+ALTER TABLE note_revisions DROP COLUMN IF EXISTS version;
+ALTER TABLE note_revisions DROP COLUMN IF EXISTS user_id;
+ALTER TABLE notes DROP COLUMN IF EXISTS version;

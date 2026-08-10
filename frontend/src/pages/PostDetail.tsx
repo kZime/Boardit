@@ -1,56 +1,28 @@
-import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "../contexts/AuthContext";
-import api from "../api/axios";
+import { useGetCurrentUser, useGetPublicNote } from "../api/gen/client";
 import SiteHeader from "../components/SiteHeader";
 import PostHeaderCard from "../components/PostHeaderCard";
 import { parseFrontmatterAndBody } from "../utils/markdownCover";
 
-interface PublicNote {
-  id: number;
-  user_id: number;
-  title: string;
-  slug: string;
-  cover_url?: string;
-  content_md: string;
-  content_html: string;
-  author_username: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export default function PostDetail() {
   const { username, slug } = useParams<{ username: string; slug: string }>();
   const { accessToken } = useAuth();
-  const [note, setNote] = useState<PublicNote | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!username || !slug) {
-      setError("Invalid URL");
-      setLoading(false);
-      return;
-    }
-    api
-      .get<PublicNote>(`/api/v1/public/notes/${username}/${slug}`)
-      .then((res) => setNote(res.data))
-      .catch(() => setError("Post not found"))
-      .finally(() => setLoading(false));
-  }, [username, slug]);
-
-  useEffect(() => {
-    if (!accessToken) {
-      setCurrentUserId(null);
-      return;
-    }
-    api
-      .get<{ id: number }>("/api/user")
-      .then((res) => setCurrentUserId(res.data.id))
-      .catch(() => setCurrentUserId(null));
-  }, [accessToken]);
+  const hasValidPath = Boolean(username && slug);
+  const {
+    data: noteResponse,
+    isLoading,
+    isError,
+  } = useGetPublicNote(username ?? "", slug ?? "", {
+    query: { enabled: hasValidPath },
+  });
+  const { data: userResponse } = useGetCurrentUser({
+    query: { enabled: Boolean(accessToken), retry: false },
+  });
+  const note = noteResponse?.data;
+  const currentUserId = userResponse?.data.id ?? null;
+  const error = !hasValidPath ? "Invalid URL" : isError ? "Post not found" : null;
 
   const formatDate = (s: string) => {
     try {
@@ -80,7 +52,7 @@ export default function PostDetail() {
       />
 
       <main className="max-w-3xl mx-auto px-4 py-8">
-        {loading && (
+        {isLoading && (
           <p className="text-gray-500 dark:text-gray-400">Loading…</p>
         )}
         {error && (
@@ -92,7 +64,7 @@ export default function PostDetail() {
           </p>
         )}
 
-        {note && !loading && (
+        {note && !isLoading && (
           <>
             <PostHeaderCard title={note.title || "(Untitled)"} coverUrl={coverUrl} />
             <article className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 md:p-8 shadow-sm dark:shadow-none">

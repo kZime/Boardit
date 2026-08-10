@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"backend/internal/model"
-
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -14,13 +12,31 @@ import (
 
 var DB *gorm.DB
 
-// Init initializes the database connection and auto-migrates all models.
+// Init initializes the database connection and applies pending SQL migrations.
 // If DATABASE_DSN is ":memory:" or contains "sqlite", SQLite is used (no setup needed for tests).
 // Otherwise PostgreSQL is used (e.g. production or CI).
 func Init() error {
-	dsn := os.Getenv("DATABASE_DSN")
+	return InitWithDSN(os.Getenv("DATABASE_DSN"))
+}
+
+func InitWithDSN(dsn string) error {
+	db, err := OpenWithDSN(dsn)
+	if err != nil {
+		return err
+	}
+
+	if err := Migrate(db); err != nil {
+		return fmt.Errorf("failed to migrate database: %w", err)
+	}
+
+	DB = db
+	return nil
+}
+
+// OpenWithDSN opens a supported database without changing its schema.
+func OpenWithDSN(dsn string) (*gorm.DB, error) {
 	if dsn == "" {
-		return fmt.Errorf("DATABASE_DSN is not set")
+		return nil, fmt.Errorf("DATABASE_DSN is not set")
 	}
 
 	var dialector gorm.Dialector
@@ -36,21 +52,9 @@ func Init() error {
 
 	db, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-
-	// Auto migrate all models in dependency order
-	if err := db.AutoMigrate(
-		&model.User{},         // 1. User table (depended on by others)
-		&model.Folder{},       // 2. Folder table (depends on user)
-		&model.Note{},         // 3. Note table (depends on user and folder)
-		&model.NoteRevision{}, // 4. Note revision table (depends on note)
-	); err != nil {
-		return fmt.Errorf("failed to auto migrate models: %w", err)
-	}
-
-	DB = db
-	return nil
+	return db, nil
 }
 
 // TruncateAllTables deletes all data from tables.
@@ -60,10 +64,9 @@ func TruncateAllTables() error {
 	if DB == nil {
 		return nil
 	}
-	dsn := os.Getenv("DATABASE_DSN")
-	if dsn == ":memory:" || strings.Contains(dsn, "sqlite") {
+	if DB.Dialector.Name() == "sqlite" {
 		// SQLite: delete in dependency order
-		for _, table := range []string{"note_revisions", "notes", "folders", "users"} {
+		for _, table := range []string{"ai_candidates", "ai_runs", "background_jobs", "outbox_events", "refresh_sessions", "note_revisions", "notes", "folders", "users"} {
 			if err := DB.Exec("DELETE FROM " + table).Error; err != nil {
 				return err
 			}
@@ -71,5 +74,5 @@ func TruncateAllTables() error {
 		return nil
 	}
 	// PostgreSQL: single TRUNCATE with CASCADE and identity reset (public schema for CI/macOS)
-	return DB.Exec("TRUNCATE TABLE public.note_revisions, public.notes, public.folders, public.users RESTART IDENTITY CASCADE").Error
+	return DB.Exec("TRUNCATE TABLE public.ai_candidates, public.ai_runs, public.background_jobs, public.outbox_events, public.refresh_sessions, public.note_revisions, public.notes, public.folders, public.users RESTART IDENTITY CASCADE").Error
 }
